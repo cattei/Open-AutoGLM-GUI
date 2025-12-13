@@ -17,7 +17,7 @@ import re
 class PhoneAgentGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("鸡哥手机助手 V0.1 - AI手机自动化工具")
+        self.root.title("鸡哥手机助手 V0.2 - AI手机自动化工具")
         self.root.geometry("1000x750")
         self.root.minsize(900, 650)
         
@@ -127,8 +127,8 @@ class PhoneAgentGUI:
         adb_control_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
         
         ttk.Button(adb_control_frame, text="🔄 刷新设备", command=self.refresh_devices).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(adb_control_frame, text="🔗 连接ADB", command=self.connect_adb_device).pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(adb_control_frame, text="📋 设备详情", command=self.show_device_details).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(adb_control_frame, text="🔗 远程连接", command=self.connect_remote_device).pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(adb_control_frame, text="📲 安装ADB键盘", command=self.install_adb_keyboard).pack(side=tk.LEFT, padx=(0, 8))
         
         # 设备选择
@@ -620,6 +620,153 @@ class PhoneAgentGUI:
             
         self._append_output(f"📱 扫描完成，发现 {len(self.connected_devices)} 台设备\n")
 
+    def connect_adb_device(self):
+        """智能ADB设备连接功能"""
+        self._append_output("🔍 正在检查设备连接状态...\n")
+        
+        try:
+            # 刷新设备列表
+            self.refresh_devices()
+            
+            # 分析设备状态
+            usb_devices = [d for d in self.connected_devices if d['status'] == 'device' and ':' not in d['id']]
+            remote_devices = [d for d in self.connected_devices if d['status'] == 'device' and ':' in d['id']]
+            offline_devices = [d for d in self.connected_devices if d['status'] == 'offline']
+            
+            # 创建智能连接对话框
+            dialog = tk.Toplevel(self.root)
+            dialog.title("智能ADB连接")
+            dialog.geometry("500x400")
+            dialog.resizable(False, False)
+            
+            # 设置对话框始终在最前
+            dialog.lift()
+            dialog.attributes('-topmost', True)
+            dialog.after(1000, lambda: dialog.attributes('-topmost', False))
+            
+            # 主框架
+            main_frame = ttk.Frame(dialog, padding="20")
+            main_frame.pack(fill=tk.BOTH, expand=True)
+            
+            # 标题
+            title_label = ttk.Label(main_frame, text="📱 ADB设备连接状态", 
+                                   font=('Arial', 12, 'bold'))
+            title_label.pack(pady=(0, 15))
+            
+            # 设备状态显示区域
+            status_frame = ttk.LabelFrame(main_frame, text="当前设备状态", padding="10")
+            status_frame.pack(fill=tk.X, pady=(0, 15))
+            
+            # USB设备状态
+            if usb_devices:
+                usb_text = f"✅ USB设备: {len(usb_devices)} 台\n"
+                for device in usb_devices:
+                    usb_text += f"   • {device['id']}\n"
+            else:
+                usb_text = "❌ 未检测到USB设备"
+            
+            usb_label = ttk.Label(status_frame, text=usb_text, font=('Consolas', 9))
+            usb_label.pack(anchor=tk.W, pady=2)
+            
+            # 远程设备状态
+            if remote_devices:
+                remote_text = f"✅ 远程设备: {len(remote_devices)} 台\n"
+                for device in remote_devices:
+                    remote_text += f"   • {device['id']}\n"
+            else:
+                remote_text = "⚪ 未连接远程设备"
+                
+            remote_label = ttk.Label(status_frame, text=remote_text, font=('Consolas', 9))
+            remote_label.pack(anchor=tk.W, pady=2)
+            
+            # 离线设备状态
+            if offline_devices:
+                offline_text = f"⚠️ 离线设备: {len(offline_devices)} 台\n"
+                for device in offline_devices:
+                    offline_text += f"   • {device['id']}\n"
+                    
+                offline_label = ttk.Label(status_frame, text=offline_text, 
+                                         font=('Consolas', 9), foreground='orange')
+                offline_label.pack(anchor=tk.W, pady=2)
+            
+            # 操作按钮区域
+            button_frame = ttk.LabelFrame(main_frame, text="连接选项", padding="10")
+            button_frame.pack(fill=tk.X, pady=(0, 15))
+            
+            def do_connect_usb():
+                """USB连接引导"""
+                if usb_devices:
+                    self._append_output("💡 USB连接提示：\n")
+                    self._append_output("   1. 确保USB调试已开启\n")
+                    self._append_output("   2. 检查USB连接线\n")
+                    self._append_output("   3. 重新授权设备\n")
+                else:
+                    self._append_output("📱 请使用USB线连接Android设备并开启USB调试\n")
+                dialog.destroy()
+                
+            def do_connect_remote():
+                """远程连接"""
+                dialog.destroy()
+                self.connect_remote_device()
+                
+            def do_refresh_devices():
+                """刷新设备"""
+                self._append_output("🔄 正在重新扫描设备...\n")
+                self.refresh_devices()
+                dialog.after(1000, lambda: self.connect_adb_device())
+                dialog.destroy()
+            
+            def do_restart_adb():
+                """重启ADB服务"""
+                try:
+                    self._append_output("🔄 正在重启ADB服务...\n")
+                    subprocess.run(['adb', 'kill-server'], capture_output=True, timeout=5)
+                    subprocess.run(['adb', 'start-server'], capture_output=True, timeout=5)
+                    self._append_output("✅ ADB服务已重启\n")
+                    self.refresh_devices()
+                    dialog.after(1000, lambda: self.connect_adb_device())
+                    dialog.destroy()
+                except Exception as e:
+                    self._append_output(f"❌ 重启ADB失败: {str(e)}\n")
+            
+            # 提供智能按钮建议
+            buttons_row1 = ttk.Frame(button_frame)
+            buttons_row1.pack(fill=tk.X, pady=5)
+            
+            if not usb_devices:
+                ttk.Button(buttons_row1, text="📱 USB连接帮助", 
+                          command=do_connect_usb).pack(side=tk.LEFT, padx=(0, 8))
+            else:
+                ttk.Button(buttons_row1, text="🔄 检查USB连接", 
+                          command=do_connect_usb).pack(side=tk.LEFT, padx=(0, 8))
+                          
+            ttk.Button(buttons_row1, text="📡 添加远程设备", 
+                      command=do_connect_remote).pack(side=tk.LEFT, padx=(0, 8))
+            
+            buttons_row2 = ttk.Frame(button_frame)
+            buttons_row2.pack(fill=tk.X, pady=5)
+            
+            ttk.Button(buttons_row2, text="🔄 重新扫描", 
+                      command=do_refresh_devices).pack(side=tk.LEFT, padx=(0, 8))
+            
+            if offline_devices or len(self.connected_devices) == 0:
+                ttk.Button(buttons_row2, text="🔧 重启ADB服务", 
+                          command=do_restart_adb).pack(side=tk.LEFT, padx=(0, 8))
+            
+            # 关闭按钮
+            ttk.Button(main_frame, text="关闭", 
+                      command=dialog.destroy).pack(pady=(10, 0))
+            
+            # 更新状态消息
+            total_devices = len(usb_devices) + len(remote_devices)
+            if total_devices > 0:
+                self._append_output(f"✅ 当前连接状态: {total_devices} 台设备可用\n")
+            else:
+                self._append_output("⚠️ 当前无可用设备，请选择连接选项\n")
+                    
+        except Exception as e:
+            self._append_output(f"❌ 设备检查失败: {str(e)}\n")
+            messagebox.showerror("错误", f"设备检查失败: {str(e)}")
             
     def show_device_details(self):
         """显示设备详细信息对话框"""
