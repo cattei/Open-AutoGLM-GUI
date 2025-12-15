@@ -17,7 +17,7 @@ import re
 class PhoneAgentGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("鸡哥手机助手 v0.3 - AI手机自动化工具")
+        self.root.title("鸡哥手机助手 v0.4 - AI手机自动化工具")
         self.root.geometry("1000x750")
         self.root.minsize(900, 650)
         
@@ -130,6 +130,7 @@ class PhoneAgentGUI:
         ttk.Button(adb_control_frame, text="🔗 连接ADB", command=self.connect_adb_device).pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(adb_control_frame, text="📋 设备详情", command=self.show_device_details).pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(adb_control_frame, text="📲 安装ADB键盘", command=self.install_adb_keyboard).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(adb_control_frame, text="📱 关注公众号", command=self.open_wechat_qrcode).pack(side=tk.LEFT, padx=(0, 8))
         
         # 设备选择
         ttk.Label(adb_frame, text="📱 选择设备:", font=('Microsoft YaHei', 9, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=5)
@@ -202,10 +203,15 @@ class PhoneAgentGUI:
         status_label = ttk.Label(status_frame, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
         status_label.grid(row=0, column=0, sticky=(tk.W, tk.E))
         
+        # 微信公众号推广文字
+        wechat_label = ttk.Label(status_frame, text="更多好玩的工具请关注微信公众号：菜芽创作小助手", 
+                               font=('Microsoft YaHei', 8), foreground='#666666')
+        wechat_label.grid(row=0, column=1, sticky=tk.N)
+        
         # 时间显示
         self.time_var = tk.StringVar(value="")
         time_label = ttk.Label(status_frame, textvariable=self.time_var, relief=tk.SUNKEN, anchor=tk.E, width=25)
-        time_label.grid(row=0, column=1, sticky=(tk.E))
+        time_label.grid(row=0, column=2, sticky=(tk.E))
         
         # 更新时间
         self.update_time()
@@ -1131,6 +1137,223 @@ class PhoneAgentGUI:
         except Exception as e:
             self._append_output(f"❌ 安装异常: {str(e)}\n")
             messagebox.showerror("安装异常", str(e))
+            
+    def open_wechat_qrcode(self):
+        """在GUI中显示微信公众号二维码"""
+        try:
+            self._append_output("📱 正在加载微信公众号二维码...\n")
+            
+            # 创建二维码显示窗口
+            qrcode_window = tk.Toplevel(self.root)
+            qrcode_window.title("关注微信公众号 - 菜芽创作小助手")
+            qrcode_window.geometry("500x550")
+            qrcode_window.resizable(False, False)
+            
+            # 设置窗口始终在最前
+            qrcode_window.lift()
+            qrcode_window.attributes('-topmost', True)
+            
+            # 主框架 - 减少padding
+            main_frame = ttk.Frame(qrcode_window, padding="10")
+            main_frame.pack(fill=tk.BOTH, expand=True)
+            
+            # 标题
+            title_label = ttk.Label(main_frame, text="📱 微信关注公众号", 
+                                   font=('Microsoft YaHei', 14, 'bold'))
+            title_label.pack(pady=(0, 5))
+            
+            # 公众号名称
+            name_label = ttk.Label(main_frame, text="菜芽创作小助手", 
+                                  font=('Microsoft YaHei', 12))
+            name_label.pack(pady=(0, 10))
+            
+            # 加载二维码图片
+            try:
+                from PIL import Image, ImageTk
+                import urllib.request
+                import io
+                import os
+                
+                # 下载二维码图片
+                qrcode_url = "https://gh-proxy.org/https://github.com/e5sub/Open-AutoGLM-GUI/blob/master/gzh.png"
+                
+                def load_qrcode():
+                    try:
+                        print(f"开始下载二维码: {qrcode_url}")
+                        
+                        # 尝试多种下载方法
+                        image_data = None
+                        download_success = False
+                        
+                        # 方法1：使用requests（如果可用）
+                        try:
+                            import requests
+                            print("尝试使用requests下载...")
+                            
+                            headers = {
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                'Accept': 'image/png,image/webp,image/apng,image/svg+xml,image/*;q=0.8,*/*;q=0.5',
+                                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                                'Connection': 'keep-alive',
+                            }
+                            
+                            # 尝试3次
+                            for attempt in range(3):
+                                try:
+                                    response = requests.get(qrcode_url, headers=headers, timeout=20, stream=True)
+                                    response.raise_for_status()
+                                    
+                                    # 流式下载，避免内存问题
+                                    image_data = b''
+                                    for chunk in response.iter_content(chunk_size=8192):
+                                        if chunk:
+                                            image_data += chunk
+                                    
+                                    print(f"requests下载完成，数据大小: {len(image_data)} 字节")
+                                    if len(image_data) > 1000:
+                                        download_success = True
+                                        break
+                                    else:
+                                        print(f"第{attempt+1}次下载数据太小: {len(image_data)} 字节")
+                                        
+                                except Exception as req_e:
+                                    print(f"requests第{attempt+1}次下载失败: {str(req_e)}")
+                                    if attempt == 2:
+                                        raise req_e
+                                    continue
+                                    
+                        except ImportError:
+                            print("requests库不可用，使用urllib...")
+                        
+                        # 方法2：使用urllib（如果requests失败或不可用）
+                        if not download_success:
+                            print("尝试使用urllib下载...")
+                            
+                            # 尝试多个不同的请求头
+                            user_agents = [
+                                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                                'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0)',
+                            ]
+                            
+                            for ua in user_agents:
+                                if download_success:
+                                    break
+                                    
+                                for attempt in range(3):
+                                    try:
+                                        req = urllib.request.Request(qrcode_url)
+                                        req.add_header('User-Agent', ua)
+                                        req.add_header('Accept', 'image/png,image/*;q=0.8,*/*;q=0.5')
+                                        req.add_header('Accept-Language', 'zh-CN,zh;q=0.9,en;q=0.8')
+                                        req.add_header('Connection', 'keep-alive')
+                                        
+                                        # 增加超时时间
+                                        with urllib.request.urlopen(req, timeout=30) as response:
+                                            # 分块读取，避免IncompleteRead
+                                            chunks = []
+                                            while True:
+                                                chunk = response.read(8192)
+                                                if not chunk:
+                                                    break
+                                                chunks.append(chunk)
+                                            
+                                            image_data = b''.join(chunks)
+                                            print(f"urllib下载完成，数据大小: {len(image_data)} 字节")
+                                            print(f"响应头: {dict(response.headers)}")
+                                            
+                                            if len(image_data) > 1000:
+                                                download_success = True
+                                                break
+                                            else:
+                                                print(f"下载数据太小: {len(image_data)} 字节")
+                                                
+                                    except Exception as url_e:
+                                        print(f"urllib下载失败（尝试{attempt+1}）: {str(url_e)}")
+                                        if attempt == 2:
+                                            if ua == user_agents[-1]:  # 最后一个UA
+                                                raise url_e
+                                        continue
+                        
+                        # 检查是否获取到有效数据
+                        if not download_success or image_data is None:
+                            raise Exception("所有下载方法都失败")
+                            
+                        if len(image_data) < 1000:
+                            raise Exception(f"获取到的图片数据太小: {len(image_data)} 字节")
+                        
+                        # 检查数据开头，确认是PNG格式
+                        print(f"数据开头20字节: {image_data[:20]}")
+                        if not image_data.startswith(b'\x89PNG\r\n\x1a\n'):
+                            print("警告：数据不是标准PNG格式")
+                            # 尝试保存到临时文件再读取
+                            import tempfile
+                            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
+                                temp_file.write(image_data)
+                                temp_path = temp_file.name
+                            
+                            try:
+                                print("尝试从临时文件读取...")
+                                image = Image.open(temp_path)
+                                print(f"图片格式: {image.format}, 大小: {image.size}")
+                                os.unlink(temp_path)
+                            except Exception as temp_e:
+                                os.unlink(temp_path)
+                                raise Exception(f"无法解析图片数据: {str(temp_e)}")
+                        else:
+                            print("检测到PNG格式，直接解析")
+                            image = Image.open(io.BytesIO(image_data))
+                            print(f"图片解析成功，格式: {image.format}, 大小: {image.size}")
+                        
+                        # 调整大小为430*430
+                        image = image.resize((430, 430), Image.Resampling.LANCZOS)
+                        photo = ImageTk.PhotoImage(image)
+                        
+                        # 显示图片
+                        img_label = ttk.Label(main_frame, image=photo)
+                        img_label.image = photo  # 保持引用
+                        img_label.pack(pady=(0, 10))
+                        
+                        # 移除关闭按钮，用户可以通过窗口的X按钮关闭
+                        qrcode_window.after(1000, lambda: qrcode_window.attributes('-topmost', False))
+                        
+                    except Exception as e:
+                        print(f"二维码加载详细错误: {str(e)}")
+                        import traceback
+                        traceback.print_exc()
+                        
+                        # 如果图片加载失败，显示详细错误信息
+                        error_label = ttk.Label(main_frame, 
+                                              text=f"二维码加载失败\n\n错误详情:\n{str(e)}", 
+                                              font=('Microsoft YaHei', 10), 
+                                              foreground='#FF6B6B',
+                                              justify=tk.CENTER)
+                        error_label.pack(pady=30)
+                        
+                        # 不添加关闭按钮，用户可以通过窗口的X按钮关闭
+                
+                # 在新线程中加载图片，避免阻塞GUI
+                import threading
+                threading.Thread(target=load_qrcode, daemon=True).start()
+                
+            except ImportError:
+                # 如果没有PIL库，显示安装提示
+                error_label = ttk.Label(main_frame, 
+                                      text="无法显示二维码\n需要安装 Pillow 库\n\n请运行: pip install Pillow", 
+                                      font=('Microsoft YaHei', 11), 
+                                      foreground='#FF6B6B',
+                                      justify=tk.CENTER)
+                error_label.pack(pady=50)
+                
+                close_btn = ttk.Button(main_frame, text="关闭", 
+                                     command=qrcode_window.destroy)
+                close_btn.pack(pady=20)
+            
+            self._append_output("✅ 二维码窗口已打开\n")
+            
+        except Exception as e:
+            self._append_output(f"❌ 打开二维码窗口失败: {str(e)}\n")
+            messagebox.showerror("打开失败", f"无法打开二维码窗口：{str(e)}")
 
 
 def main():
