@@ -9,6 +9,16 @@ import subprocess
 import threading
 import os
 import sys
+
+# 隐藏控制台窗口（仅在Windows上有效）
+if sys.platform == 'win32' and 'python.exe' in sys.executable:
+    import ctypes
+    try:
+        # 尝试隐藏控制台窗口
+        ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
+    except:
+        pass
+import sys
 import json
 from datetime import datetime
 import re
@@ -17,9 +27,12 @@ import re
 class PhoneAgentGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("鸡哥手机助手 v0.4 - AI手机自动化工具")
+        self.root.title("鸡哥手机助手 v0.5 - AI手机自动化工具")
         self.root.geometry("1000x750")
         self.root.minsize(900, 650)
+        
+        # 显示快速启动提示
+        self.show_startup_message()
         
         # 设置样式
         self.setup_styles()
@@ -37,12 +50,48 @@ class PhoneAgentGUI:
         # ADB相关变量
         self.connected_devices = []
         self.selected_device_id = tk.StringVar(value="")
-
-        # 先创建界面组件，再加载配置（避免在组件未创建时访问属性）
-        self.create_widgets()
         
-        # 加载配置
-        self.load_config()
+        # 二维码窗口控制
+        self.qrcode_window = None
+
+        # 快速创建基础界面
+        self.create_basic_widgets()
+        
+        # 更新界面显示完成
+        self.root.update_idletasks()
+        
+        # 异步加载剩余组件和配置
+        threading.Thread(target=self.async_initialization, daemon=True).start()
+    
+    def show_startup_message(self):
+        """显示启动提示"""
+        startup_label = tk.Label(self.root, text="🚀 正在启动...", 
+                                 font=('Microsoft YaHei', 12), 
+                                 fg='#2E86AB', bg='white')
+        startup_label.place(relx=0.5, rely=0.5, anchor='center')
+        self.startup_label = startup_label
+        self.root.update_idletasks()
+    
+    def async_initialization(self):
+        """异步初始化剩余组件"""
+        try:
+            # 延迟创建完整界面
+            self.root.after(100, self.create_full_widgets)
+            
+            # 延迟加载配置
+            self.root.after(200, self.load_config_async)
+            
+        except Exception as e:
+            print(f"异步初始化错误: {e}")
+    
+    def load_config_async(self):
+        """异步加载配置"""
+        try:
+            self.load_config()
+            self.status_var.set("✅ 配置已加载")
+        except Exception as e:
+            if hasattr(self, 'status_var'):
+                self.status_var.set("⚠️ 配置加载失败")
         
     def setup_styles(self):
         """设置界面样式"""
@@ -61,163 +110,172 @@ class PhoneAgentGUI:
         style.configure('Card.TFrame', relief='raised', borderwidth=1)
         style.configure('Output.TFrame', relief='sunken', borderwidth=2)
         
-    def create_widgets(self):
+    def create_basic_widgets(self):
+        """创建基础界面组件（快速显示）"""
         # 主框架
-        main_frame = ttk.Frame(self.root, padding="15")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.main_frame = ttk.Frame(self.root, padding="15")
+        self.main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # 配置权重
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
-        main_frame.columnconfigure(1, weight=1)
-        
-        # 标题区域
-        title_frame = ttk.Frame(main_frame)
-        title_frame.grid(row=0, column=0, columnspan=3, pady=(0, 25))
-        
-        title_label = ttk.Label(title_frame, text="🤖 鸡哥手机助手", style='Title.TLabel')
-        title_label.pack()
-        
-        subtitle_label = ttk.Label(title_frame, text="AI驱动的手机自动化工具", font=('Microsoft YaHei', 10))
-        subtitle_label.pack()
-        
-        # 配置区域
-        config_frame = ttk.LabelFrame(main_frame, text="⚙️ 配置参数", style='Card.TFrame', padding="8")
-        config_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 8))
-        config_frame.columnconfigure(1, weight=1)
-        
-        # Base URL
-        ttk.Label(config_frame, text="🌐 Base URL:", font=('Arial', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, pady=3)
-        url_entry = ttk.Entry(config_frame, textvariable=self.base_url, width=50, font=('Arial', 9))
-        url_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
-        
-        # Model
-        ttk.Label(config_frame, text="🧠 Model:", font=('Arial', 9, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=3)
-        model_entry = ttk.Entry(config_frame, textvariable=self.model, width=50, font=('Arial', 9))
-        model_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
-        
-        # API Key
-        ttk.Label(config_frame, text="🔑 API Key:", font=('Arial', 9, 'bold')).grid(row=2, column=0, sticky=tk.W, pady=3)
-        apikey_frame = ttk.Frame(config_frame)
-        apikey_frame.grid(row=2, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
-        apikey_frame.columnconfigure(0, weight=1)
-        
-        self.apikey_entry = ttk.Entry(apikey_frame, textvariable=self.apikey, width=40, show="*", font=('Arial', 9))
-        self.apikey_entry.grid(row=0, column=0, sticky=(tk.W, tk.E))
-        
-        self.show_apikey_btn = ttk.Button(apikey_frame, text="👁️", width=2, command=self.toggle_apikey_visibility)
-        self.show_apikey_btn.grid(row=0, column=1, padx=(3, 0))
-        
-        # Task
-        ttk.Label(config_frame, text="📝 Task:", font=('Arial', 9, 'bold')).grid(row=3, column=0, sticky=(tk.NW, tk.W), pady=3)
-        self.task_text = tk.Text(config_frame, width=50, height=2, font=('Arial', 9), wrap=tk.WORD)
-        self.task_text.grid(row=3, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
-        
-        # 设置初始任务文本
-        self.task_text.insert("1.0", self.task.get())
-        self.task_text.bind("<KeyRelease>", lambda e: self.task.set(self.task_text.get("1.0", tk.END).strip()))
-        
-        # ADB设备区域
-        adb_frame = ttk.LabelFrame(main_frame, text="📱 ADB设备管理", style='Card.TFrame', padding="8")
-        adb_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(8, 8))
-        adb_frame.columnconfigure(1, weight=1)
-        
-        # ADB控制按钮
-        adb_control_frame = ttk.Frame(adb_frame)
-        adb_control_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
-        
-        ttk.Button(adb_control_frame, text="🔄 刷新设备", command=self.refresh_devices).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(adb_control_frame, text="🔗 连接ADB", command=self.connect_adb_device).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(adb_control_frame, text="📋 设备详情", command=self.show_device_details).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(adb_control_frame, text="📲 安装ADB键盘", command=self.install_adb_keyboard).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(adb_control_frame, text="📱 关注公众号", command=self.open_wechat_qrcode).pack(side=tk.LEFT, padx=(0, 8))
-        
-        # 设备选择
-        ttk.Label(adb_frame, text="📱 选择设备:", font=('Microsoft YaHei', 9, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=5)
-        
-        device_select_frame = ttk.Frame(adb_frame)
-        device_select_frame.grid(row=1, column=1, sticky=(tk.W, tk.E), padx=(15, 0))
-        device_select_frame.columnconfigure(0, weight=1)
-        
-        self.device_combo = ttk.Combobox(device_select_frame, textvariable=self.selected_device_id, 
-                                      state="readonly", font=('Microsoft YaHei', 9))
-        self.device_combo.grid(row=0, column=0, sticky=(tk.W, tk.E))
-        
-        self.device_status_label = ttk.Label(device_select_frame, text="未检测到设备", 
-                                        font=('Microsoft YaHei', 9), foreground='red')
-        self.device_status_label.grid(row=0, column=1, padx=(10, 0))
-        
-        # 按钮区域
-        button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=3, column=0, columnspan=3, pady=5)
-        
-        # 主要操作按钮
-        main_buttons = ttk.Frame(button_frame)
-        main_buttons.pack(side=tk.LEFT, padx=(0, 20))
-        
-        self.run_button = ttk.Button(main_buttons, text="🚀 运行", command=self.run_agent, style='Success.TButton')
-        self.run_button.grid(row=0, column=0, padx=5)
-        
-        self.stop_button = ttk.Button(main_buttons, text="⏹️ 停止", command=self.stop_agent, state=tk.DISABLED, style='Danger.TButton')
-        self.stop_button.grid(row=0, column=1, padx=5)
-        
-        # 辅助功能按钮
-        aux_buttons = ttk.Frame(button_frame)
-        aux_buttons.pack(side=tk.LEFT)
-        
-        ttk.Button(aux_buttons, text="🗑️ 清空", command=self.clear_output).grid(row=0, column=0, padx=5)
-        ttk.Button(aux_buttons, text="💾 保存配置", command=self.save_config).grid(row=0, column=1, padx=5)
-        ttk.Button(aux_buttons, text="📁 加载配置", command=self.load_config_dialog).grid(row=0, column=2, padx=5)
-        
-        # 输出区域
-        output_frame = ttk.LabelFrame(main_frame, text="📋 输出控制台", style='Output.TFrame', padding="5")
-        output_frame.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(5, 0))
-        output_frame.columnconfigure(0, weight=1)
-        output_frame.rowconfigure(0, weight=1)
-        main_frame.rowconfigure(4, weight=1)
-        
-        # 创建带行号的文本框
-        text_frame = ttk.Frame(output_frame)
-        text_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        text_frame.columnconfigure(1, weight=1)
-        text_frame.rowconfigure(0, weight=1)
-        
-        # 行号显示
-        self.line_numbers = tk.Text(text_frame, width=4, padx=3, takefocus=0, 
-                                   border=0, state='disabled', wrap='none',
-                                   background='#f0f0f0', foreground='#666666')
-        self.line_numbers.grid(row=0, column=0, sticky=(tk.N, tk.S))
-        
-        # 主输出文本框
-        self.output_text = scrolledtext.ScrolledText(text_frame, wrap=tk.WORD, width=80, height=20,
-                                                   font=('Consolas', 9), bg='#1e1e1e', fg='#ffffff',
-                                                   insertbackground='#ffffff')
-        self.output_text.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S))
-        
-        # 状态栏
-        status_frame = ttk.Frame(main_frame)
-        status_frame.grid(row=5, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5, 0))
-        status_frame.columnconfigure(1, weight=1)
-        
-        self.status_var = tk.StringVar(value="✅ 就绪")
-        status_label = ttk.Label(status_frame, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
-        status_label.grid(row=0, column=0, sticky=(tk.W, tk.E))
-        
-        # 微信公众号推广文字
-        wechat_label = ttk.Label(status_frame, text="更多好玩的工具请关注微信公众号：菜芽创作小助手", 
-                               font=('Microsoft YaHei', 8), foreground='#666666')
-        wechat_label.grid(row=0, column=1, sticky=tk.N)
-        
-        # 时间显示
-        self.time_var = tk.StringVar(value="")
-        time_label = ttk.Label(status_frame, textvariable=self.time_var, relief=tk.SUNKEN, anchor=tk.E, width=25)
-        time_label.grid(row=0, column=2, sticky=(tk.E))
-        
-        # 更新时间
-        self.update_time()
-        
-        # 初始刷新设备列表（在所有组件创建完成后）
-        self.refresh_devices()
+        self.main_frame.columnconfigure(1, weight=1)
+    
+    def create_full_widgets(self):
+        """创建完整界面组件（异步加载）"""
+        try:
+            # 移除启动提示
+            if hasattr(self, 'startup_label'):
+                self.startup_label.destroy()
+            
+            # 标题区域
+            title_frame = ttk.Frame(self.main_frame)
+            title_frame.grid(row=0, column=0, columnspan=3, pady=(0, 25))
+            
+            title_label = ttk.Label(title_frame, text="🤖 鸡哥手机助手", style='Title.TLabel')
+            title_label.pack()
+            
+            subtitle_label = ttk.Label(title_frame, text="AI驱动的手机自动化工具", font=('Microsoft YaHei', 10))
+            subtitle_label.pack()
+            
+            # 配置区域
+            config_frame = ttk.LabelFrame(self.main_frame, text="⚙️ 配置参数", style='Card.TFrame', padding="8")
+            config_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 8))
+            config_frame.columnconfigure(1, weight=1)
+            
+            # Base URL
+            ttk.Label(config_frame, text="🌐 Base URL:", font=('Arial', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, pady=3)
+            url_entry = ttk.Entry(config_frame, textvariable=self.base_url, width=50, font=('Arial', 9))
+            url_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
+            
+            # Model
+            ttk.Label(config_frame, text="🧠 Model:", font=('Arial', 9, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=3)
+            model_entry = ttk.Entry(config_frame, textvariable=self.model, width=50, font=('Arial', 9))
+            model_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
+            
+            # API Key
+            ttk.Label(config_frame, text="🔑 API Key:", font=('Arial', 9, 'bold')).grid(row=2, column=0, sticky=tk.W, pady=3)
+            apikey_frame = ttk.Frame(config_frame)
+            apikey_frame.grid(row=2, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
+            apikey_frame.columnconfigure(0, weight=1)
+            
+            self.apikey_entry = ttk.Entry(apikey_frame, textvariable=self.apikey, width=40, show="*", font=('Arial', 9))
+            self.apikey_entry.grid(row=0, column=0, sticky=(tk.W, tk.E))
+            
+            self.show_apikey_btn = ttk.Button(apikey_frame, text="👁️", width=2, command=self.toggle_apikey_visibility)
+            self.show_apikey_btn.grid(row=0, column=1, padx=(3, 0))
+            
+            # Task
+            ttk.Label(config_frame, text="📝 Task:", font=('Arial', 9, 'bold')).grid(row=3, column=0, sticky=(tk.NW, tk.W), pady=3)
+            self.task_text = tk.Text(config_frame, width=50, height=2, font=('Arial', 9), wrap=tk.WORD)
+            self.task_text.grid(row=3, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
+            
+            # 设置初始任务文本
+            self.task_text.insert("1.0", self.task.get())
+            self.task_text.bind("<KeyRelease>", lambda e: self.task.set(self.task_text.get("1.0", tk.END).strip()))
+            
+            # ADB设备区域
+            adb_frame = ttk.LabelFrame(self.main_frame, text="📱 ADB设备管理", style='Card.TFrame', padding="8")
+            adb_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(8, 8))
+            adb_frame.columnconfigure(1, weight=1)
+            
+            # ADB控制按钮
+            adb_control_frame = ttk.Frame(adb_frame)
+            adb_control_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+            
+            ttk.Button(adb_control_frame, text="🔄 刷新设备", command=self.refresh_devices).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(adb_control_frame, text="🔗 连接ADB", command=self.connect_adb_device).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(adb_control_frame, text="📋 设备详情", command=self.show_device_details).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(adb_control_frame, text="📲 安装ADB键盘", command=self.install_adb_keyboard).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(adb_control_frame, text="📱 关注公众号", command=self.open_wechat_qrcode).pack(side=tk.LEFT, padx=(0, 8))
+            
+            # 设备选择
+            ttk.Label(adb_frame, text="📱 选择设备:", font=('Microsoft YaHei', 9, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=5)
+            
+            device_select_frame = ttk.Frame(adb_frame)
+            device_select_frame.grid(row=1, column=1, sticky=(tk.W, tk.E), padx=(15, 0))
+            device_select_frame.columnconfigure(0, weight=1)
+            
+            self.device_combo = ttk.Combobox(device_select_frame, textvariable=self.selected_device_id, 
+                                          state="readonly", font=('Microsoft YaHei', 9))
+            self.device_combo.grid(row=0, column=0, sticky=(tk.W, tk.E))
+            
+            self.device_status_label = ttk.Label(device_select_frame, text="未检测到设备", 
+                                            font=('Microsoft YaHei', 9), foreground='red')
+            self.device_status_label.grid(row=0, column=1, padx=(10, 0))
+            
+            # 按钮区域
+            button_frame = ttk.Frame(self.main_frame)
+            button_frame.grid(row=3, column=0, columnspan=3, pady=5)
+            
+            # 主要操作按钮
+            main_buttons = ttk.Frame(button_frame)
+            main_buttons.pack(side=tk.LEFT, padx=(0, 20))
+            
+            self.run_button = ttk.Button(main_buttons, text="🚀 运行", command=self.run_agent, style='Success.TButton')
+            self.run_button.grid(row=0, column=0, padx=5)
+            
+            self.stop_button = ttk.Button(main_buttons, text="⏹️ 停止", command=self.stop_agent, state=tk.DISABLED, style='Danger.TButton')
+            self.stop_button.grid(row=0, column=1, padx=5)
+            
+            # 辅助功能按钮
+            aux_buttons = ttk.Frame(button_frame)
+            aux_buttons.pack(side=tk.LEFT)
+            
+            ttk.Button(aux_buttons, text="🗑️ 清空", command=self.clear_output).grid(row=0, column=0, padx=5)
+            ttk.Button(aux_buttons, text="💾 保存配置", command=self.save_config).grid(row=0, column=1, padx=5)
+            ttk.Button(aux_buttons, text="📁 加载配置", command=self.load_config_dialog).grid(row=0, column=2, padx=5)
+            
+            # 输出区域
+            output_frame = ttk.LabelFrame(self.main_frame, text="📋 输出控制台", style='Output.TFrame', padding="5")
+            output_frame.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(5, 0))
+            output_frame.columnconfigure(0, weight=1)
+            output_frame.rowconfigure(0, weight=1)
+            self.main_frame.rowconfigure(4, weight=1)
+            
+            # 主输出文本框（移除行号）
+            self.output_text = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, width=80, height=20,
+                                                       font=('Consolas', 9), bg='#1e1e1e', fg='#ffffff',
+                                                       insertbackground='#ffffff')
+            self.output_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            
+            # 状态栏
+            status_frame = ttk.Frame(self.main_frame)
+            status_frame.grid(row=5, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5, 0))
+            status_frame.columnconfigure(1, weight=1)
+            
+            self.status_var = tk.StringVar(value="✅ 就绪")
+            status_label = ttk.Label(status_frame, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
+            status_label.grid(row=0, column=0, sticky=(tk.W, tk.E))
+            
+            # 微信公众号推广文字
+            wechat_label = ttk.Label(status_frame, text="更多好玩的工具请关注微信公众号：菜芽创作小助手", 
+                                   font=('Microsoft YaHei', 8), foreground='#666666')
+            wechat_label.grid(row=0, column=1, sticky=tk.N)
+            
+            # 时间显示
+            self.time_var = tk.StringVar(value="")
+            time_label = ttk.Label(status_frame, textvariable=self.time_var, relief=tk.SUNKEN, anchor=tk.E, width=25)
+            time_label.grid(row=0, column=2, sticky=(tk.E))
+            
+            # 更新时间
+            self.update_time()
+            
+            # 初始刷新设备列表（在所有组件创建完成后）
+            self.refresh_devices()
+            
+        except Exception as e:
+            print(f"创建完整界面时出错: {e}")
+            # 如果失败，至少显示基本界面
+            if hasattr(self, 'startup_label'):
+                self.startup_label.config(text="❌ 界面加载失败")
+    
+    def update_time(self):
+        """更新时间显示"""
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if hasattr(self, 'time_var'):
+            self.time_var.set(current_time)
+        self.root.after(1000, self.update_time)
         
     def update_time(self):
         """更新时间显示"""
@@ -288,7 +346,7 @@ class PhoneAgentGUI:
             # 先进行系统要求检查
             safe_output("🔍 检查系统要求...\n")
             if not main.check_system_requirements():
-                safe_output("❌ 系统要求检查失败，请检查ADB和设备连接\n")
+                safe_output("❌ 系统要求检查失败，请检查ADB和设备连接，以及ADB键盘键盘设置\n")
                 self.root.after(0, self._process_finished, -1)
                 return
             
@@ -523,24 +581,13 @@ class PhoneAgentGUI:
         self.output_text.insert(tk.END, text)
         self.output_text.see(tk.END)
         
-        # 更新行号
-        self.update_line_numbers()
-        
     def _insert_direct_text(self, text):
         """直接插入文本，完全保持原始格式"""
         if text:  # 插入所有内容，包括空格和空行
             self.output_text.insert(tk.END, text)
             self.output_text.see(tk.END)
-            self.update_line_numbers()
         
-    def update_line_numbers(self):
-        """更新行号显示"""
-        lines = self.output_text.get("1.0", tk.END).count('\n')
-        line_numbers = "\n".join(str(i) for i in range(1, lines + 1))
-        self.line_numbers.config(state='normal')
-        self.line_numbers.delete("1.0", tk.END)
-        self.line_numbers.insert("1.0", line_numbers)
-        self.line_numbers.config(state='disabled')
+
         
     def toggle_apikey_visibility(self):
         """切换API密钥显示/隐藏"""
@@ -674,7 +721,6 @@ class PhoneAgentGUI:
                 
     def clear_output(self):
         self.output_text.delete("1.0", tk.END)
-        self.update_line_numbers()
         self.status_var.set("✅ 输出已清空")
         
     # ADB相关方法
@@ -1141,29 +1187,41 @@ class PhoneAgentGUI:
     def open_wechat_qrcode(self):
         """在GUI中显示微信公众号二维码"""
         try:
+            # 检查是否已经有二维码窗口打开
+            if self.qrcode_window is not None and tk.Toplevel.winfo_exists(self.qrcode_window):
+                self._append_output("⚠️ 二维码窗口已经打开，请先关闭现有窗口\n")
+                # 将现有窗口置于前台
+                self.qrcode_window.lift()
+                self.qrcode_window.attributes('-topmost', True)
+                self.qrcode_window.after(1000, lambda: self.qrcode_window.attributes('-topmost', False))
+                return
+            
             self._append_output("📱 正在加载微信公众号二维码...\n")
             
             # 创建二维码显示窗口
-            qrcode_window = tk.Toplevel(self.root)
-            qrcode_window.title("关注微信公众号 - 菜芽创作小助手")
-            qrcode_window.geometry("500x550")
-            qrcode_window.resizable(False, False)
+            self.qrcode_window = tk.Toplevel(self.root)
+            self.qrcode_window.title("关注微信公众号 - 菜芽创作小助手")
+            self.qrcode_window.geometry("500x550")
+            self.qrcode_window.resizable(False, False)
             
             # 设置窗口始终在最前
-            qrcode_window.lift()
-            qrcode_window.attributes('-topmost', True)
+            self.qrcode_window.lift()
+            self.qrcode_window.attributes('-topmost', True)
+            
+            # 绑定窗口关闭事件
+            self.qrcode_window.protocol("WM_DELETE_WINDOW", self._on_qrcode_window_close)
             
             # 主框架 - 减少padding
-            main_frame = ttk.Frame(qrcode_window, padding="10")
-            main_frame.pack(fill=tk.BOTH, expand=True)
+            self.qrcode_main_frame = ttk.Frame(self.qrcode_window, padding="10")
+            self.qrcode_main_frame.pack(fill=tk.BOTH, expand=True)
             
             # 标题
-            title_label = ttk.Label(main_frame, text="📱 微信关注公众号", 
+            title_label = ttk.Label(self.qrcode_main_frame, text="📱 微信关注公众号", 
                                    font=('Microsoft YaHei', 14, 'bold'))
             title_label.pack(pady=(0, 5))
             
             # 公众号名称
-            name_label = ttk.Label(main_frame, text="菜芽创作小助手", 
+            name_label = ttk.Label(self.qrcode_main_frame, text="菜芽创作小助手", 
                                   font=('Microsoft YaHei', 12))
             name_label.pack(pady=(0, 10))
             
@@ -1175,109 +1233,69 @@ class PhoneAgentGUI:
                 import os
                 
                 # 下载二维码图片
-                qrcode_url = "https://gh-proxy.org/https://github.com/e5sub/Open-AutoGLM-GUI/blob/master/gzh.png"
+                qrcode_url = "https://gh-proxy.org/https://raw.githubusercontent.com/e5sub/Open-AutoGLM-GUI/master/gzh.png"
                 
                 def load_qrcode():
                     try:
                         print(f"开始下载二维码: {qrcode_url}")
                         
-                        # 尝试多种下载方法
+                        # 使用urllib下载图片
                         image_data = None
                         download_success = False
                         
-                        # 方法1：使用requests（如果可用）
-                        try:
-                            import requests
-                            print("尝试使用requests下载...")
-                            
-                            headers = {
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                                'Accept': 'image/png,image/webp,image/apng,image/svg+xml,image/*;q=0.8,*/*;q=0.5',
-                                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-                                'Connection': 'keep-alive',
-                            }
-                            
-                            # 尝试3次
+                        print("尝试使用urllib下载...")
+                        
+                        # 尝试多个不同的请求头
+                        user_agents = [
+                            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                            'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0)',
+                        ]
+                        
+                        for ua in user_agents:
+                            if download_success:
+                                break
+                                
                             for attempt in range(3):
                                 try:
-                                    response = requests.get(qrcode_url, headers=headers, timeout=20, stream=True)
-                                    response.raise_for_status()
+                                    req = urllib.request.Request(qrcode_url)
+                                    req.add_header('User-Agent', ua)
+                                    req.add_header('Accept', 'image/png,image/*;q=0.8,*/*;q=0.5')
+                                    req.add_header('Accept-Language', 'zh-CN,zh;q=0.9,en;q=0.8')
+                                    req.add_header('Connection', 'keep-alive')
                                     
-                                    # 流式下载，避免内存问题
-                                    image_data = b''
-                                    for chunk in response.iter_content(chunk_size=8192):
-                                        if chunk:
-                                            image_data += chunk
-                                    
-                                    print(f"requests下载完成，数据大小: {len(image_data)} 字节")
-                                    if len(image_data) > 1000:
-                                        download_success = True
-                                        break
-                                    else:
-                                        print(f"第{attempt+1}次下载数据太小: {len(image_data)} 字节")
-                                        
-                                except Exception as req_e:
-                                    print(f"requests第{attempt+1}次下载失败: {str(req_e)}")
-                                    if attempt == 2:
-                                        raise req_e
-                                    continue
-                                    
-                        except ImportError:
-                            print("requests库不可用，使用urllib...")
-                        
-                        # 方法2：使用urllib（如果requests失败或不可用）
-                        if not download_success:
-                            print("尝试使用urllib下载...")
-                            
-                            # 尝试多个不同的请求头
-                            user_agents = [
-                                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                                'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0)',
-                            ]
-                            
-                            for ua in user_agents:
-                                if download_success:
-                                    break
-                                    
-                                for attempt in range(3):
-                                    try:
-                                        req = urllib.request.Request(qrcode_url)
-                                        req.add_header('User-Agent', ua)
-                                        req.add_header('Accept', 'image/png,image/*;q=0.8,*/*;q=0.5')
-                                        req.add_header('Accept-Language', 'zh-CN,zh;q=0.9,en;q=0.8')
-                                        req.add_header('Connection', 'keep-alive')
-                                        
-                                        # 增加超时时间
-                                        with urllib.request.urlopen(req, timeout=30) as response:
-                                            # 分块读取，避免IncompleteRead
-                                            chunks = []
-                                            while True:
-                                                chunk = response.read(8192)
-                                                if not chunk:
-                                                    break
-                                                chunks.append(chunk)
-                                            
-                                            image_data = b''.join(chunks)
-                                            print(f"urllib下载完成，数据大小: {len(image_data)} 字节")
-                                            print(f"响应头: {dict(response.headers)}")
-                                            
-                                            if len(image_data) > 1000:
-                                                download_success = True
+                                    # 增加超时时间
+                                    with urllib.request.urlopen(req, timeout=30) as response:
+                                        # 分块读取，避免IncompleteRead
+                                        chunks = []
+                                        while True:
+                                            chunk = response.read(8192)
+                                            if not chunk:
                                                 break
-                                            else:
-                                                print(f"下载数据太小: {len(image_data)} 字节")
-                                                
-                                    except Exception as url_e:
-                                        print(f"urllib下载失败（尝试{attempt+1}）: {str(url_e)}")
-                                        if attempt == 2:
-                                            if ua == user_agents[-1]:  # 最后一个UA
-                                                raise url_e
-                                        continue
+                                            chunks.append(chunk)
+                                        
+                                        image_data = b''.join(chunks)
+                                        print(f"urllib下载完成，数据大小: {len(image_data)} 字节")
+                                        print(f"响应头: {dict(response.headers)}")
+                                        
+                                        if len(image_data) > 1000:
+                                            download_success = True
+                                            break
+                                        else:
+                                            print(f"下载数据太小: {len(image_data)} 字节")
+                                            
+                                except Exception as url_e:
+                                    print(f"urllib下载失败（尝试{attempt+1}）: {str(url_e)}")
+                                    print(f"URL: {qrcode_url}")
+                                    print(f"User-Agent: {ua}")
+                                    if attempt == 2:
+                                        if ua == user_agents[-1]:  # 最后一个UA
+                                            raise url_e
+                                    continue
                         
                         # 检查是否获取到有效数据
                         if not download_success or image_data is None:
-                            raise Exception("所有下载方法都失败")
+                            raise Exception("下载失败")
                             
                         if len(image_data) < 1000:
                             raise Exception(f"获取到的图片数据太小: {len(image_data)} 字节")
@@ -1309,28 +1327,32 @@ class PhoneAgentGUI:
                         image = image.resize((430, 430), Image.Resampling.LANCZOS)
                         photo = ImageTk.PhotoImage(image)
                         
-                        # 显示图片
-                        img_label = ttk.Label(main_frame, image=photo)
-                        img_label.image = photo  # 保持引用
-                        img_label.pack(pady=(0, 10))
+                        # 在主线程中显示图片
+                        def show_image():
+                            if self.qrcode_window and tk.Toplevel.winfo_exists(self.qrcode_window):
+                                img_label = ttk.Label(self.qrcode_main_frame, image=photo)
+                                img_label.image = photo  # 保持引用
+                                img_label.pack(pady=(0, 10))
+                                self.qrcode_window.after(1000, lambda: self.qrcode_window.attributes('-topmost', False))
                         
-                        # 移除关闭按钮，用户可以通过窗口的X按钮关闭
-                        qrcode_window.after(1000, lambda: qrcode_window.attributes('-topmost', False))
+                        self.root.after(0, show_image)
                         
                     except Exception as e:
                         print(f"二维码加载详细错误: {str(e)}")
                         import traceback
                         traceback.print_exc()
                         
-                        # 如果图片加载失败，显示详细错误信息
-                        error_label = ttk.Label(main_frame, 
-                                              text=f"二维码加载失败\n\n错误详情:\n{str(e)}", 
-                                              font=('Microsoft YaHei', 10), 
-                                              foreground='#FF6B6B',
-                                              justify=tk.CENTER)
-                        error_label.pack(pady=30)
+                        # 在主线程中显示错误信息
+                        def show_error():
+                            if self.qrcode_window and tk.Toplevel.winfo_exists(self.qrcode_window):
+                                error_label = ttk.Label(self.qrcode_main_frame, 
+                                                      text=f"二维码加载失败\n\n错误详情:\n{str(e)}", 
+                                                      font=('Microsoft YaHei', 10), 
+                                                      foreground='#FF6B6B',
+                                                      justify=tk.CENTER)
+                                error_label.pack(pady=30)
                         
-                        # 不添加关闭按钮，用户可以通过窗口的X按钮关闭
+                        self.root.after(0, show_error)
                 
                 # 在新线程中加载图片，避免阻塞GUI
                 import threading
@@ -1338,22 +1360,33 @@ class PhoneAgentGUI:
                 
             except ImportError:
                 # 如果没有PIL库，显示安装提示
-                error_label = ttk.Label(main_frame, 
-                                      text="无法显示二维码\n需要安装 Pillow 库\n\n请运行: pip install Pillow", 
-                                      font=('Microsoft YaHei', 11), 
-                                      foreground='#FF6B6B',
-                                      justify=tk.CENTER)
-                error_label.pack(pady=50)
+                def show_import_error():
+                    if self.qrcode_window and tk.Toplevel.winfo_exists(self.qrcode_window):
+                        error_label = ttk.Label(self.qrcode_main_frame, 
+                                              text="无法显示二维码\n需要安装 Pillow 库\n\n请运行: pip install Pillow", 
+                                              font=('Microsoft YaHei', 11), 
+                                              foreground='#FF6B6B',
+                                              justify=tk.CENTER)
+                        error_label.pack(pady=50)
+                        
+                        close_btn = ttk.Button(self.qrcode_main_frame, text="关闭", 
+                                             command=self._on_qrcode_window_close)
+                        close_btn.pack(pady=20)
                 
-                close_btn = ttk.Button(main_frame, text="关闭", 
-                                     command=qrcode_window.destroy)
-                close_btn.pack(pady=20)
+                self.root.after(0, show_import_error)
             
             self._append_output("✅ 二维码窗口已打开\n")
             
         except Exception as e:
             self._append_output(f"❌ 打开二维码窗口失败: {str(e)}\n")
             messagebox.showerror("打开失败", f"无法打开二维码窗口：{str(e)}")
+            self.qrcode_window = None  # 重置变量
+    
+    def _on_qrcode_window_close(self):
+        """二维码窗口关闭事件处理"""
+        self.qrcode_window.destroy()
+        self.qrcode_window = None
+        self._append_output("✅ 二维码窗口已关闭\n")
 
 
 def main():
