@@ -27,7 +27,7 @@ import re
 class PhoneAgentGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("鸡哥手机助手 v0.6 - 更多好玩的工具请关注微信公众号：菜芽创作小助手")
+        self.root.title("鸡哥手机助手 v0.7 - 更多好玩的工具请关注微信公众号：菜芽创作小助手")
         self.root.geometry("1000x750")
         self.root.minsize(900, 650)
         
@@ -150,10 +150,10 @@ class PhoneAgentGUI:
         style.theme_use('clam')
         
         # 配置颜色
-        style.configure('Title.TLabel', font=('Arial', 18, 'bold'), foreground='#2E86AB')
-        style.configure('Header.TLabel', font=('Arial', 12, 'bold'), foreground='#333333')
-        style.configure('Success.TButton', font=('Arial', 10, 'bold'))
-        style.configure('Danger.TButton', font=('Arial', 10, 'bold'))
+        style.configure('Title.TLabel', font=('Microsoft YaHei', 18, 'bold'), foreground='#2E86AB')
+        style.configure('Header.TLabel', font=('Microsoft YaHei', 12, 'bold'), foreground='#333333')
+        style.configure('Success.TButton', font=('Microsoft YaHei', 10, 'bold'))
+        style.configure('Danger.TButton', font=('Microsoft YaHei', 10, 'bold'))
         
         # 配置框架
         style.configure('Card.TFrame', relief='raised', borderwidth=1)
@@ -193,30 +193,30 @@ class PhoneAgentGUI:
             config_frame.columnconfigure(1, weight=1)
             
             # Base URL
-            ttk.Label(config_frame, text="🌐 Base URL:", font=('Arial', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, pady=3)
-            url_entry = ttk.Entry(config_frame, textvariable=self.base_url, width=50, font=('Arial', 9))
+            ttk.Label(config_frame, text="🌐 Base URL:", font=('Microsoft YaHei', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, pady=3)
+            url_entry = ttk.Entry(config_frame, textvariable=self.base_url, width=50, font=('Microsoft YaHei', 9))
             url_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
             
             # Model
-            ttk.Label(config_frame, text="🧠 Model:", font=('Arial', 9, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=3)
-            model_entry = ttk.Entry(config_frame, textvariable=self.model, width=50, font=('Arial', 9))
+            ttk.Label(config_frame, text="🧠 Model:", font=('Microsoft YaHei', 9, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=3)
+            model_entry = ttk.Entry(config_frame, textvariable=self.model, width=50, font=('Microsoft YaHei', 9))
             model_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
             
             # API Key
-            ttk.Label(config_frame, text="🔑 API Key:", font=('Arial', 9, 'bold')).grid(row=2, column=0, sticky=tk.W, pady=3)
+            ttk.Label(config_frame, text="🔑 API Key:", font=('Microsoft YaHei', 9, 'bold')).grid(row=2, column=0, sticky=tk.W, pady=3)
             apikey_frame = ttk.Frame(config_frame)
             apikey_frame.grid(row=2, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
             apikey_frame.columnconfigure(0, weight=1)
             
-            self.apikey_entry = ttk.Entry(apikey_frame, textvariable=self.apikey, width=40, show="*", font=('Arial', 9))
+            self.apikey_entry = ttk.Entry(apikey_frame, textvariable=self.apikey, width=40, show="*", font=('Microsoft YaHei', 9))
             self.apikey_entry.grid(row=0, column=0, sticky=(tk.W, tk.E))
             
             self.show_apikey_btn = ttk.Button(apikey_frame, text="👁️", width=2, command=self.toggle_apikey_visibility)
             self.show_apikey_btn.grid(row=0, column=1, padx=(3, 0))
             
             # Task
-            ttk.Label(config_frame, text="📝 Task:", font=('Arial', 9, 'bold')).grid(row=3, column=0, sticky=(tk.NW, tk.W), pady=3)
-            self.task_text = tk.Text(config_frame, width=50, height=2, font=('Arial', 9), wrap=tk.WORD)
+            ttk.Label(config_frame, text="📝 Task:", font=('Microsoft YaHei', 9, 'bold')).grid(row=3, column=0, sticky=(tk.NW, tk.W), pady=3)
+            self.task_text = tk.Text(config_frame, width=50, height=2, font=('Microsoft YaHei', 9), wrap=tk.WORD)
             self.task_text.grid(row=3, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
             
             # 设置初始任务文本
@@ -284,7 +284,7 @@ class PhoneAgentGUI:
             
             # 主输出文本框（移除行号）
             self.output_text = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, width=80, height=20,
-                                                       font=('Consolas', 9), bg='#1e1e1e', fg='#ffffff',
+                                                       font=('Microsoft YaHei', 9), bg='#1e1e1e', fg='#ffffff',
                                                        insertbackground='#ffffff')
             self.output_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
             
@@ -943,7 +943,7 @@ class PhoneAgentGUI:
             
             # 标题
             title_label = ttk.Label(main_frame, text="📱 ADB设备连接状态", 
-                                   font=('Arial', 12, 'bold'))
+                                   font=('Microsoft YaHei', 12, 'bold'))
             title_label.pack(pady=(0, 15))
             
             # 设备状态显示区域
@@ -958,7 +958,7 @@ class PhoneAgentGUI:
             else:
                 usb_text = "❌ 未检测到USB设备"
             
-            usb_label = ttk.Label(status_frame, text=usb_text, font=('Consolas', 9))
+            usb_label = ttk.Label(status_frame, text=usb_text, font=('Microsoft YaHei', 9))
             usb_label.pack(anchor=tk.W, pady=2)
             
             # 远程设备状态
@@ -969,7 +969,7 @@ class PhoneAgentGUI:
             else:
                 remote_text = "⚪ 未连接远程设备"
                 
-            remote_label = ttk.Label(status_frame, text=remote_text, font=('Consolas', 9))
+            remote_label = ttk.Label(status_frame, text=remote_text, font=('Microsoft YaHei', 9))
             remote_label.pack(anchor=tk.W, pady=2)
             
             # 离线设备状态
@@ -979,7 +979,7 @@ class PhoneAgentGUI:
                     offline_text += f"   • {device['id']}\n"
                     
                 offline_label = ttk.Label(status_frame, text=offline_text, 
-                                         font=('Consolas', 9), foreground='orange')
+                                         font=('Microsoft YaHei', 9), foreground='orange')
                 offline_label.pack(anchor=tk.W, pady=2)
             
             # 操作按钮区域
@@ -1028,27 +1028,25 @@ class PhoneAgentGUI:
             
             if not usb_devices:
                 ttk.Button(buttons_row1, text="📱 USB连接帮助", 
-                          command=do_connect_usb).pack(side=tk.LEFT, padx=(0, 8))
+                          command=do_connect_usb, style='Success.TButton').pack(side=tk.LEFT, padx=(0, 8))
             else:
                 ttk.Button(buttons_row1, text="🔄 检查USB连接", 
-                          command=do_connect_usb).pack(side=tk.LEFT, padx=(0, 8))
+                          command=do_connect_usb, style='Success.TButton').pack(side=tk.LEFT, padx=(0, 8))
                           
             ttk.Button(buttons_row1, text="📡 添加远程设备", 
-                      command=do_connect_remote).pack(side=tk.LEFT, padx=(0, 8))
+                      command=do_connect_remote, style='Success.TButton').pack(side=tk.LEFT, padx=(0, 8))
             
             buttons_row2 = ttk.Frame(button_frame)
             buttons_row2.pack(fill=tk.X, pady=5)
             
             ttk.Button(buttons_row2, text="🔄 重新扫描", 
-                      command=do_refresh_devices).pack(side=tk.LEFT, padx=(0, 8))
+                      command=do_refresh_devices, style='Success.TButton').pack(side=tk.LEFT, padx=(0, 8))
             
             if offline_devices or len(self.connected_devices) == 0:
                 ttk.Button(buttons_row2, text="🔧 重启ADB服务", 
-                          command=do_restart_adb).pack(side=tk.LEFT, padx=(0, 8))
+                          command=do_restart_adb, style='Danger.TButton').pack(side=tk.LEFT, padx=(0, 8))
             
-            # 关闭按钮
-            ttk.Button(main_frame, text="关闭", 
-                      command=dialog.destroy).pack(pady=(10, 0))
+
             
             # 更新状态消息
             total_devices = len(usb_devices) + len(remote_devices)
@@ -1075,7 +1073,7 @@ class PhoneAgentGUI:
         
         # 创建文本框显示详细信息
         details_text = scrolledtext.ScrolledText(details_window, wrap=tk.WORD, 
-                                           font=('Consolas', 9), bg='#f8f8f8')
+                                           font=('Microsoft YaHei', 9), bg='#f8f8f8')
         details_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # 获取每个设备的详细信息
@@ -1098,18 +1096,36 @@ class PhoneAgentGUI:
         details_text.insert("1.0", details_info)
         details_text.config(state=tk.DISABLED)
         
+        # 关闭按钮
+        button_frame = ttk.Frame(details_window, style='Card.TFrame')
+        button_frame.pack(pady=10)
+        
+        ttk.Button(button_frame, text="关闭", command=details_window.destroy, style='Danger.TButton').pack()
+        
     def connect_device(self):
         """连接到指定IP的设备"""
         dialog = tk.Toplevel(self.root)
         dialog.title("连接设备")
-        dialog.geometry("400x150")
+        dialog.geometry("400x180")
         dialog.resizable(False, False)
         
+        # 设置对话框样式和配色，与主窗口保持一致
+        dialog.configure(bg='#f0f0f0')
+        
+        # 主框架 - 使用与主窗口一致的padding
+        main_frame = ttk.Frame(dialog, padding="15")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # 配置区域 - 使用与主窗口一致的LabelFrame样式
+        config_frame = ttk.LabelFrame(main_frame, text="🔗 设备连接配置", style='Card.TFrame', padding="8")
+        config_frame.pack(fill=tk.X, pady=(10, 15))
+        
         # IP地址输入
-        ttk.Label(dialog, text="请输入设备IP地址:").pack(pady=(20, 5))
+        ttk.Label(config_frame, text="🌐 设备地址:", font=('Microsoft YaHei', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, pady=5)
         ip_var = tk.StringVar(value="192.168.1.100:5555")
-        ip_entry = ttk.Entry(dialog, textvariable=ip_var, width=30, font=('Consolas', 10))
-        ip_entry.pack(pady=5)
+        ip_entry = ttk.Entry(config_frame, textvariable=ip_var, width=25, font=('Microsoft YaHei', 10))
+        ip_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=5)
+        config_frame.columnconfigure(1, weight=1)
         ip_entry.select_range(0, len(ip_var.get()))
         ip_entry.focus()
         
@@ -1133,30 +1149,42 @@ class PhoneAgentGUI:
             else:
                 messagebox.showwarning("输入错误", "请输入有效的IP地址")
                 
-        # 按钮
-        button_frame = ttk.Frame(dialog)
-        button_frame.pack(pady=20)
+        # 按钮区域 - 使用与主窗口一致的样式
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(pady=(10, 0))
         
-        ttk.Button(button_frame, text="连接", command=do_connect).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="取消", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="🔗 连接", command=do_connect, style='Success.TButton').pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="❌ 取消", command=dialog.destroy, style='Danger.TButton').pack(side=tk.LEFT, padx=5)
         
     def connect_remote_device(self):
         """远程连接ADB设备"""
         dialog = tk.Toplevel(self.root)
         dialog.title("远程ADB连接")
-        dialog.geometry("500x200")
+        dialog.geometry("500x250")
         dialog.resizable(False, False)
         
-        # IP地址和端口输入
-        ttk.Label(dialog, text="请输入设备IP地址:").pack(pady=(15, 5))
-        ip_var = tk.StringVar(value="192.168.1.100")
-        ip_entry = ttk.Entry(dialog, textvariable=ip_var, width=30, font=('Consolas', 10))
-        ip_entry.pack(pady=5)
+        # 设置对话框样式和配色，与主窗口保持一致
+        dialog.configure(bg='#f0f0f0')
         
-        ttk.Label(dialog, text="请输入端口号:").pack(pady=(5, 5))
+        # 主框架 - 使用与主窗口一致的padding
+        main_frame = ttk.Frame(dialog, padding="15")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # 配置区域 - 使用与主窗口一致的LabelFrame样式
+        config_frame = ttk.LabelFrame(main_frame, text="📡 远程设备配置", style='Card.TFrame', padding="8")
+        config_frame.pack(fill=tk.X, pady=(10, 15))
+        
+        # IP地址和端口输入
+        ttk.Label(config_frame, text="🌐 设备IP地址:", font=('Microsoft YaHei', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, pady=5)
+        ip_var = tk.StringVar(value="192.168.1.100")
+        ip_entry = ttk.Entry(config_frame, textvariable=ip_var, width=25, font=('Microsoft YaHei', 10))
+        ip_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=5)
+        config_frame.columnconfigure(1, weight=1)
+        
+        ttk.Label(config_frame, text="🔌 端口号:", font=('Microsoft YaHei', 9, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=5)
         port_var = tk.StringVar(value="5555")
-        port_entry = ttk.Entry(dialog, textvariable=port_var, width=15, font=('Consolas', 10))
-        port_entry.pack(pady=5)
+        port_entry = ttk.Entry(config_frame, textvariable=port_var, width=10, font=('Microsoft YaHei', 10))
+        port_entry.grid(row=1, column=1, sticky=tk.W, padx=(10, 0), pady=5)
         
         def do_remote_connect():
             ip_address = ip_var.get().strip()
@@ -1196,12 +1224,12 @@ class PhoneAgentGUI:
             else:
                 messagebox.showwarning("输入错误", "请输入有效的IP地址和端口号")
                 
-        # 按钮
-        button_frame = ttk.Frame(dialog)
-        button_frame.pack(pady=15)
+        # 按钮区域 - 使用与主窗口一致的样式
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(pady=(10, 0))
         
-        ttk.Button(button_frame, text="远程连接", command=do_remote_connect).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="取消", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="🌐 远程连接", command=do_remote_connect, style='Success.TButton').pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="❌ 取消", command=dialog.destroy, style='Danger.TButton').pack(side=tk.LEFT, padx=5)
         
     def install_adb_keyboard(self):
         """安装ADB键盘应用"""
