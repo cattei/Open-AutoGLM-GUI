@@ -27,7 +27,7 @@ import re
 class PhoneAgentGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("鸡哥手机助手 v0.9 - 更多好玩的工具请关注微信公众号：菜芽创作小助手")
+        self.root.title("鸡哥手机助手 v1.0 - 更多好玩的工具请关注微信公众号：菜芽创作小助手")
         self.root.geometry("1000x750")
         self.root.minsize(900, 650)
         
@@ -43,6 +43,7 @@ class PhoneAgentGUI:
         self.apikey = tk.StringVar(value="your-bigmodel-api-key")
         self.task = tk.StringVar(value="输入你想要执行的任务，例如：打开美团搜索附近的火锅店")
         self.max_steps = tk.StringVar(value="200")
+        self.device_type = tk.StringVar(value="安卓")  # 默认为安卓
         
         self.process = None
         self.running = False
@@ -51,9 +52,13 @@ class PhoneAgentGUI:
         # ADB相关变量
         self.connected_devices = []
         self.selected_device_id = tk.StringVar(value="")
+        # 支持环境变量 PHONE_AGENT_DEVICE_ID
+        self.env_device_id = os.getenv("PHONE_AGENT_DEVICE_ID", "")
         
-        # 二维码窗口控制
+        # 窗口控制变量
         self.qrcode_window = None
+        self.adb_connection_window = None
+        self.device_details_window = None
 
         # 快速创建基础界面
         self.create_basic_widgets()
@@ -123,19 +128,27 @@ class PhoneAgentGUI:
             task_text = config.get('task', '输入你想要执行的任务，例如：打开美团搜索附近的火锅店')
             self.task.set(task_text)
             self.max_steps.set(str(config.get('max_steps', '200')))
+            device_type_value = config.get('device_type', 'adb')
+            # 将保存的英文值转换为中文显示
+            if device_type_value == 'adb':
+                self.device_type.set('安卓')
+            else:
+                self.device_type.set('鸿蒙')
             
             # 如果界面已创建，更新任务文本框
             if hasattr(self, 'task_text'):
                 self.task_text.delete("1.0", tk.END)
                 self.task_text.insert("1.0", task_text)
             
-            # 恢复选中的设备
-            selected_device = config.get('selected_device', '')
+            # 恢复选中的设备，优先使用环境变量
+            selected_device = self.env_device_id or config.get('selected_device', '')
             if selected_device and hasattr(self, 'selected_device_id'):
                 self.selected_device_id.set(selected_device)
             
             if hasattr(self, 'status_var'):
                 self.status_var.set("✅ 配置已加载")
+            
+
                 
         except Exception as e:
             print(f"应用配置失败: {str(e)}")
@@ -228,16 +241,49 @@ class PhoneAgentGUI:
             self.task_text.insert("1.0", self.task.get())
             self.task_text.bind("<KeyRelease>", lambda e: self.on_task_change())
             
-            # Max Steps
-            ttk.Label(config_frame, text="🔢 最大步数:", font=('Microsoft YaHei', 9, 'bold')).grid(row=4, column=0, sticky=tk.W, pady=3)
-            max_steps_frame = ttk.Frame(config_frame)
-            max_steps_frame.grid(row=4, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
-            max_steps_frame.columnconfigure(0, weight=1)
+            # Max Steps 和 Device Type 在同一排
+            settings_row_frame = ttk.Frame(config_frame)
+            settings_row_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=3)
+            settings_row_frame.columnconfigure(1, weight=1)
+            settings_row_frame.columnconfigure(4, weight=1)
             
-            self.max_steps_entry = ttk.Entry(max_steps_frame, textvariable=self.max_steps, width=10, font=('Microsoft YaHei', 9))
+            # Device Type (左半部分) - 精确对齐Task输入框
+            device_type_frame = ttk.Frame(settings_row_frame)
+            device_type_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), padx=(0, 10))
+            device_type_frame.columnconfigure(0, weight=0)  # 标签列固定宽度
+            device_type_frame.columnconfigure(1, weight=1)  # 输入框列拉伸
+            
+            # 标签，与配置区域的标签对齐
+            ttk.Label(device_type_frame, text="🔗 设备类型:", font=('Microsoft YaHei', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
+            
+            # 输入框和说明文字的组合 - 使用10px的padding与Task输入框对齐
+            device_type_combo_frame = ttk.Frame(device_type_frame)
+            device_type_combo_frame.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(10, 0))
+            device_type_combo_frame.columnconfigure(0, weight=0)
+            
+            self.device_type_combo = ttk.Combobox(device_type_combo_frame, textvariable=self.device_type, width=15, font=('Microsoft YaHei', 9), state="readonly")
+            self.device_type_combo['values'] = ('安卓', '鸿蒙')
+            self.device_type_combo.grid(row=0, column=0, sticky=tk.W)
+            self.device_type_combo.bind('<<ComboboxSelected>>', lambda e: self.on_device_type_change())
+            ttk.Label(device_type_combo_frame, text="（选择设备系统类型）", font=('Microsoft YaHei', 8), foreground='gray').grid(row=0, column=1, padx=(3, 0))
+            
+            # Max Steps (右半部分)
+            max_steps_frame = ttk.Frame(settings_row_frame)
+            max_steps_frame.grid(row=0, column=2, columnspan=2, sticky=(tk.W, tk.E))
+            max_steps_frame.columnconfigure(0, weight=0)
+            max_steps_frame.columnconfigure(1, weight=1)
+            
+            # 标签，与配置区域的标签对齐
+            ttk.Label(max_steps_frame, text="🔢 最大步数:", font=('Microsoft YaHei', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
+            
+            # 输入框和说明文字的组合 - 使用10px的padding与Task输入框对齐
+            max_steps_entry_frame = ttk.Frame(max_steps_frame)
+            max_steps_entry_frame.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(10, 0))
+            max_steps_entry_frame.columnconfigure(0, weight=0)
+            
+            self.max_steps_entry = ttk.Entry(max_steps_entry_frame, textvariable=self.max_steps, width=10, font=('Microsoft YaHei', 9))
             self.max_steps_entry.grid(row=0, column=0, sticky=tk.W)
-            
-            ttk.Label(max_steps_frame, text="（每个任务的最大执行步数）", font=('Microsoft YaHei', 8), foreground='gray').grid(row=0, column=1, padx=(5, 0))
+            ttk.Label(max_steps_entry_frame, text="（每个任务最大执行步数）", font=('Microsoft YaHei', 8), foreground='gray').grid(row=0, column=1, padx=(3, 0))
             
             # Base URL变化时自动保存
             url_entry.bind("<KeyRelease>", lambda e: self.on_config_change())
@@ -252,24 +298,24 @@ class PhoneAgentGUI:
             self.max_steps_entry.bind("<KeyRelease>", lambda e: self.on_config_change())
             
             # ADB设备区域
-            adb_frame = ttk.LabelFrame(self.main_frame, text="📱 ADB设备管理", style='Card.TFrame', padding="8")
-            adb_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(8, 8))
-            adb_frame.columnconfigure(1, weight=1)
+            self.adb_frame = ttk.LabelFrame(self.main_frame, text="📱 ADB设备管理", style='Card.TFrame', padding="8")
+            self.adb_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(8, 8))
+            self.adb_frame.columnconfigure(1, weight=1)
             
             # ADB控制按钮
-            adb_control_frame = ttk.Frame(adb_frame)
-            adb_control_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+            self.adb_control_frame = ttk.Frame(self.adb_frame)
+            self.adb_control_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
             
-            ttk.Button(adb_control_frame, text="🔄 刷新设备", command=self.refresh_devices).pack(side=tk.LEFT, padx=(0, 8))
-            ttk.Button(adb_control_frame, text="🔗 连接ADB", command=self.connect_adb_device).pack(side=tk.LEFT, padx=(0, 8))
-            ttk.Button(adb_control_frame, text="📋 设备详情", command=self.show_device_details).pack(side=tk.LEFT, padx=(0, 8))
-            ttk.Button(adb_control_frame, text="📲 安装ADB键盘", command=self.install_adb_keyboard).pack(side=tk.LEFT, padx=(0, 8))
-            ttk.Button(adb_control_frame, text="📱 关注公众号", command=self.open_wechat_qrcode).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(self.adb_control_frame, text="🔄 刷新设备", command=self.refresh_devices).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(self.adb_control_frame, text="🔗 连接ADB", command=self.connect_adb_device).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(self.adb_control_frame, text="📋 设备详情", command=self.show_device_details).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(self.adb_control_frame, text="📲 安装ADB键盘", command=self.install_adb_keyboard).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(self.adb_control_frame, text="📱 关注公众号", command=self.open_wechat_qrcode).pack(side=tk.LEFT, padx=(0, 8))
             
             # 设备选择
-            ttk.Label(adb_frame, text="📱 选择设备:", font=('Microsoft YaHei', 9, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=5)
+            ttk.Label(self.adb_frame, text="📱 选择设备:", font=('Microsoft YaHei', 9, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=5)
             
-            device_select_frame = ttk.Frame(adb_frame)
+            device_select_frame = ttk.Frame(self.adb_frame)
             device_select_frame.grid(row=1, column=1, sticky=(tk.W, tk.E), padx=(15, 0))
             device_select_frame.columnconfigure(0, weight=1)
             
@@ -283,6 +329,9 @@ class PhoneAgentGUI:
             self.device_status_label = ttk.Label(device_select_frame, text="未检测到设备", 
                                             font=('Microsoft YaHei', 9), foreground='red')
             self.device_status_label.grid(row=0, column=1, padx=(10, 0))
+            
+            # 根据当前设备类型初始化按钮状态
+            self.on_device_type_change()
             
             # 按钮区域
             button_frame = ttk.Frame(self.main_frame)
@@ -347,8 +396,12 @@ class PhoneAgentGUI:
         except Exception as e:
             print(f"创建完整界面时出错: {e}")
             # 如果失败，至少显示基本界面
-            if hasattr(self, 'startup_label'):
-                self.startup_label.config(text="❌ 界面加载失败")
+            try:
+                if hasattr(self, 'startup_label') and self.startup_label.winfo_exists():
+                    self.startup_label.config(text="❌ 界面加载失败")
+            except tk.TclError:
+                # startup_label 可能已经被销毁
+                pass
     
     def update_time(self):
         """更新时间显示"""
@@ -394,8 +447,16 @@ class PhoneAgentGUI:
         self.status_var.set("🔄 正在执行任务...")
         self.clear_output()
             
-        # 提前获取选中的设备（避免在打包环境中使用未定义的变量）
-        selected_device = self.selected_device_id.get()
+        # 获取设备ID，优先使用环境变量，其次是用户选择
+        selected_device = self.env_device_id or self.selected_device_id.get()
+        
+        # 如果环境变量存在，输出提示信息
+        if self.env_device_id:
+            self._append_output(f"🔧 使用环境变量设备ID: {self.env_device_id}\n")
+        elif selected_device:
+            self._append_output(f"📱 使用用户选择设备ID: {selected_device}\n")
+        else:
+            self._append_output("⚠️ 未指定设备ID，将使用默认设备\n")
 
         # 无论在开发环境还是打包环境中，都使用直接运行方式
         self._run_agent_direct(base_url, model, apikey, task, selected_device)
@@ -413,7 +474,7 @@ class PhoneAgentGUI:
             # 导入必要模块
             from phone_agent.agent import PhoneAgent, AgentConfig
             from phone_agent.model import ModelConfig
-            from phone_agent.adb import ADBConnection, list_devices
+            from phone_agent.device_factory import DeviceType, set_device_type
             # 从main.py导入检查函数
             import main
             
@@ -476,6 +537,13 @@ class PhoneAgentGUI:
                     adb_path = 'adb.exe'
             else:
                 adb_path = 'adb.exe'
+            
+            # 设置设备类型
+            device_type_value = self.device_type.get()
+            device_type = DeviceType.ADB if device_type_value == "安卓" else DeviceType.HDC
+            device_type_str = "adb" if device_type_value == "安卓" else "hdc"
+            set_device_type(device_type)
+            safe_output(f"🔗 设备类型: {device_type_str.upper()}\n")
             
             # 创建代理配置
             agent_config = AgentConfig(
@@ -657,13 +725,17 @@ class PhoneAgentGUI:
         if not text:
             return
         
+        # 检查output_text是否已创建
+        if not hasattr(self, 'output_text'):
+            return
+        
         # 直接插入文本，不做额外格式化（因为输出已经带有时间戳）
         self.output_text.insert(tk.END, text)
         self.output_text.see(tk.END)
         
     def _insert_direct_text(self, text):
         """直接插入文本，完全保持原始格式"""
-        if text:  # 插入所有内容，包括空格和空行
+        if text and hasattr(self, 'output_text'):  # 插入所有内容，包括空格和空行
             self.output_text.insert(tk.END, text)
             self.output_text.see(tk.END)
         
@@ -687,7 +759,8 @@ class PhoneAgentGUI:
                 'apikey': self.apikey.get(),
                 'task': self.task_text.get("1.0", tk.END).strip(),
                 'max_steps': int(self.max_steps.get() or 200),
-                'selected_device': self.selected_device_id.get(),
+                'device_type': "adb" if self.device_type.get() == "安卓" else "hdc",
+                'selected_device': self.selected_device_id.get(),  # 保存用户选择的设备ID（不是环境变量）
                 'remote_connection': getattr(self, 'last_remote_connection', {
                     'ip': '192.168.1.100',
                     'port': '5555'
@@ -717,7 +790,8 @@ class PhoneAgentGUI:
                 'apikey': self.apikey.get(),
                 'task': self.task_text.get("1.0", tk.END).strip(),
                 'max_steps': int(self.max_steps.get() or 200),
-                'selected_device': self.selected_device_id.get(),
+                'device_type': "adb" if self.device_type.get() == "安卓" else "hdc",
+                'selected_device': self.selected_device_id.get(),  # 保存用户选择的设备ID（不是环境变量）
                 'remote_connection': getattr(self, 'last_remote_connection', {
                     'ip': '192.168.1.100',
                     'port': '5555'
@@ -752,8 +826,8 @@ class PhoneAgentGUI:
                     self.task_text.delete("1.0", tk.END)
                     self.task_text.insert("1.0", task_text)
                 
-                # 恢复选中的设备
-                selected_device = config.get('selected_device', '')
+                # 恢复选中的设备，优先使用环境变量
+                selected_device = self.env_device_id or config.get('selected_device', '')
                 if selected_device and hasattr(self, 'selected_device_id'):
                     self.selected_device_id.set(selected_device)
                 
@@ -796,8 +870,8 @@ class PhoneAgentGUI:
                 self.task_text.delete("1.0", tk.END)
                 self.task_text.insert("1.0", task_text)
                 
-                # 恢复选中的设备
-                selected_device = config.get('selected_device', '')
+                # 恢复选中的设备，优先使用环境变量
+                selected_device = self.env_device_id or config.get('selected_device', '')
                 if selected_device:
                     self.selected_device_id.set(selected_device)
                 
@@ -859,8 +933,10 @@ class PhoneAgentGUI:
                 self._append_output(f"停止任务时出错: {str(e)}\n")
                 
     def clear_output(self):
-        self.output_text.delete("1.0", tk.END)
-        self.status_var.set("✅ 输出已清空")
+        if hasattr(self, 'output_text'):
+            self.output_text.delete("1.0", tk.END)
+        if hasattr(self, 'status_var'):
+            self.status_var.set("✅ 输出已清空")
     
     def _run_adb_silent(self, cmd, timeout=10):
         """静默运行ADB命令，不显示控制台窗口"""
@@ -891,7 +967,36 @@ class PhoneAgentGUI:
                     self.stdout = ""
                     self.stderr = str(error)
             return ErrorResult(str(e))
-        
+    
+    def _run_hdc_silent(self, cmd, timeout=10):
+        """静默运行HDC命令，不显示控制台窗口"""
+        try:
+            # 在Windows上隐藏控制台窗口
+            if os.name == 'nt':
+                # 设置CREATE_NO_WINDOW标志来隐藏控制台窗口
+                creationflags = subprocess.CREATE_NO_WINDOW
+            else:
+                creationflags = 0
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, 
+                                  timeout=timeout, creationflags=creationflags)
+            return result
+        except subprocess.TimeoutExpired:
+            # 返回一个模拟的结果对象
+            class TimeoutResult:
+                def __init__(self):
+                    self.returncode = -1
+                    self.stdout = ""
+                    self.stderr = f"Command timed out after {timeout} seconds"
+            return TimeoutResult()
+        except Exception as e:
+            # 返回一个模拟的结果对象
+            class ErrorResult:
+                def __init__(self, error):
+                    self.returncode = -1
+                    self.stdout = ""
+                    self.stderr = str(error)
+            return ErrorResult(str(e))
     # ADB相关方法
     def async_refresh_devices(self):
         """异步刷新ADB设备列表，避免阻塞界面"""
@@ -931,78 +1036,115 @@ class PhoneAgentGUI:
                 self.root.after(0, lambda: self.device_status_label.config(text="扫描失败", foreground='red'))
                 
     def refresh_devices(self):
-        """刷新ADB设备列表"""
+        """刷新设备列表（ADB或HDC）"""
         try:
-            self._append_output("🔍 正在扫描ADB设备...\n")
+            device_type = self.device_type.get()
+            device_type_en = "hdc" if device_type == "鸿蒙" else "adb"
+            device_text = "HDC" if device_type_en == "hdc" else "ADB"
+            self._append_output(f"🔍 正在扫描{device_text}设备...\n")
             
             # 获取设备列表
-            result = self._run_adb_silent(['adb', 'devices'])
+            if device_type_en == "hdc":
+                result = self._run_hdc_silent(['hdc', 'list', 'targets'])
+            else:
+                result = self._run_adb_silent(['adb', 'devices'])
             
             if result.returncode == 0:
-                self.connected_devices = self._parse_device_list(result.stdout)
+                self.connected_devices = self._parse_device_list(result.stdout, device_type_en)
                 self._update_device_display()
             else:
-                self._append_output("❌ ADB命令执行失败\n")
-                self.device_status_label.config(text="ADB错误", foreground='red')
+                self._append_output(f"❌ {device_type_text}命令执行失败\n")
+                self.device_status_label.config(text=f"{device_type_text}错误", foreground='red')
                 
         except subprocess.TimeoutExpired:
-            self._append_output("❌ ADB命令超时\n")
-            self.device_status_label.config(text="ADB超时", foreground='red')
+            self._append_output(f"❌ {device_type_text}命令超时\n")
+            self.device_status_label.config(text=f"{device_type_text}超时", foreground='red')
         except FileNotFoundError:
-            self._append_output("❌ 未找到ADB，请检查Android SDK是否安装\n")
-            self.device_status_label.config(text="ADB未安装", foreground='red')
+            tool_name = "HDC" if device_type == "hdc" else "Android SDK (ADB)"
+            self._append_output(f"❌ 未找到{device_type_text}，请检查{tool_name}是否安装\n")
+            self.device_status_label.config(text=f"{device_type_text}未安装", foreground='red')
         except Exception as e:
             self._append_output(f"❌ 扫描设备失败: {str(e)}\n")
             self.device_status_label.config(text="扫描失败", foreground='red')
             
-    def _parse_device_list(self, adb_output):
-        """解析ADB设备列表输出"""
+    def _parse_device_list(self, output, device_type="adb"):
+        """解析设备列表输出（ADB或HDC）"""
         devices = []
-        if not adb_output:
+        if not output:
             return devices
         
-        lines = adb_output.strip().split('\n')
+        lines = output.strip().split('\n')
         
-        for line in lines[1:]:  # 跳过标题行
-            if line.strip() and '\t' in line:
-                parts = line.split('\t')
-                if len(parts) >= 2:
-                    device_id = parts[0].strip()
-                    status = parts[1].strip()
+        if device_type == "hdc":
+            # HDC格式：设备ID
+            for line in lines:
+                line = line.strip()
+                if line and not line.startswith('[Empty]'):
                     devices.append({
-                        'id': device_id,
-                        'status': status,
-                        'info': self._get_device_info(device_id) if status == 'device' else None
+                        'id': line,
+                        'status': 'device',
+                        'info': self._get_device_info(line, device_type) if True else None
                     })
+        else:
+            # ADB格式：设备ID\t状态
+            for line in lines[1:]:  # 跳过标题行
+                if line.strip() and '\t' in line:
+                    parts = line.split('\t')
+                    if len(parts) >= 2:
+                        device_id = parts[0].strip()
+                        status = parts[1].strip()
+                        devices.append({
+                            'id': device_id,
+                            'status': status,
+                            'info': self._get_device_info(device_id, device_type) if status == 'device' else None
+                        })
                     
         return devices
         
-    def _get_device_info(self, device_id):
-        """获取设备详细信息"""
+    def _get_device_info(self, device_id, device_type="adb"):
+        """获取设备详细信息（ADB或HDC）"""
         try:
             info = {}
             
-            # 获取设备型号
-            model_result = self._run_adb_silent(['adb', '-s', device_id, 'shell', 'getprop', 'ro.product.model'], timeout=5)
-            if model_result.returncode == 0:
-                info['model'] = model_result.stdout.strip() if model_result.stdout else ''
+            if device_type == "hdc":
+                # HDC设备信息获取
+                # 获取设备型号
+                model_result = self._run_hdc_silent(['hdc', '-t', device_id, 'shell', 'param', 'get', 'const.product.model'], timeout=5)
+                if model_result.returncode == 0:
+                    info['model'] = model_result.stdout.strip() if model_result.stdout else ''
+                    
+                # 获取系统版本
+                version_result = self._run_hdc_silent(['hdc', '-t', device_id, 'shell', 'param', 'get', 'const.product.software.version'], timeout=5)
+                if version_result.returncode == 0:
+                    info['os_version'] = version_result.stdout.strip() if version_result.stdout else ''
+                    
+                # 获取设备制造商
+                manufacturer_result = self._run_hdc_silent(['hdc', '-t', device_id, 'shell', 'param', 'get', 'const.product.manufacturer'], timeout=5)
+                if manufacturer_result.returncode == 0:
+                    info['manufacturer'] = manufacturer_result.stdout.strip() if manufacturer_result.stdout else ''
+            else:
+                # ADB设备信息获取
+                # 获取设备型号
+                model_result = self._run_adb_silent(['adb', '-s', device_id, 'shell', 'getprop', 'ro.product.model'], timeout=5)
+                if model_result.returncode == 0:
+                    info['model'] = model_result.stdout.strip() if model_result.stdout else ''
+                    
+                # 获取Android版本
+                version_result = self._run_adb_silent(['adb', '-s', device_id, 'shell', 'getprop', 'ro.build.version.release'], timeout=5)
+                if version_result.returncode == 0:
+                    info['android_version'] = version_result.stdout.strip() if version_result.stdout else ''
+                    
+                # 获取设备制造商
+                manufacturer_result = self._run_adb_silent(['adb', '-s', device_id, 'shell', 'getprop', 'ro.product.manufacturer'], timeout=5)
+                if manufacturer_result.returncode == 0:
+                    info['manufacturer'] = manufacturer_result.stdout.strip() if manufacturer_result.stdout else ''
                 
-            # 获取Android版本
-            version_result = self._run_adb_silent(['adb', '-s', device_id, 'shell', 'getprop', 'ro.build.version.release'], timeout=5)
-            if version_result.returncode == 0:
-                info['android_version'] = version_result.stdout.strip() if version_result.stdout else ''
-                
-            # 获取设备制造商
-            manufacturer_result = self._run_adb_silent(['adb', '-s', device_id, 'shell', 'getprop', 'ro.product.manufacturer'], timeout=5)
-            if manufacturer_result.returncode == 0:
-                info['manufacturer'] = manufacturer_result.stdout.strip() if manufacturer_result.stdout else ''
-                
-            # 获取IP地址
-            ip_result = self._run_adb_silent(['adb', '-s', device_id, 'shell', 'ip', 'addr', 'show', 'wlan0'], timeout=5)
-            if ip_result.returncode == 0 and ip_result.stdout:
-                ip_match = re.search(r'inet (\d+\.\d+\.\d+\.\d+)', ip_result.stdout)
-                if ip_match:
-                    info['ip'] = ip_match.group(1)
+                # 获取IP地址
+                ip_result = self._run_adb_silent(['adb', '-s', device_id, 'shell', 'ip', 'addr', 'show', 'wlan0'], timeout=5)
+                if ip_result.returncode == 0 and ip_result.stdout:
+                    ip_match = re.search(r'inet (\d+\.\d+\.\d+\.\d+)', ip_result.stdout)
+                    if ip_match:
+                        info['ip'] = ip_match.group(1)
                     
             return info
             
@@ -1015,29 +1157,70 @@ class PhoneAgentGUI:
         if self.connected_devices:
             # 更新下拉框
             device_options = []
+            device_ids = []
+            env_device_index = -1
+            
             for device in self.connected_devices:
                 if device['status'] == 'device':
                     display_name = device['id']
+                    device_ids.append(device['id'])
                     if device['info'] and 'model' in device['info']:
                         display_name += f" ({device['info']['model']})"
                     device_options.append(display_name)
                     
+                    # 检查是否匹配环境变量设备ID
+                    if self.env_device_id and device['id'] == self.env_device_id:
+                        env_device_index = len(device_options) - 1
+                    
             self.device_combo['values'] = device_options
             
             if device_options:
-                self.device_combo.current(0)
-                self.device_status_label.config(text=f"已连接 {len(device_options)} 台设备", foreground='green')
-            else:
-                self.device_status_label.config(text="无可用设备", foreground='orange')
+                # 如果用户已经有选择，保持用户选择；否则使用环境变量（如果存在且有效）
+                current_selection = self.selected_device_id.get()
+                
+                if current_selection and current_selection in device_ids:
+                    # 保持用户当前的选择
+                    index = device_ids.index(current_selection)
+                    self.device_combo.current(index)
+                    self.device_status_label.config(text=f"已连接 {len(device_options)} 台设备 (用户选择: {current_selection})", foreground='green')
+                elif env_device_index >= 0:
+                    # 用户没有选择或选择无效，使用环境变量
+                    self.device_combo.current(env_device_index)
+                    self.selected_device_id.set(device_ids[env_device_index])
+                    self.device_status_label.config(text=f"已连接 {len(device_options)} 台设备 (环境变量: {self.env_device_id})", foreground='blue')
+                else:
+                    # 默认选择第一个设备
+                    self.device_combo.current(0)
+                    if self.env_device_id:
+                        self.device_status_label.config(text=f"已连接 {len(device_options)} 台设备 (环境变量设备 {self.env_device_id} 未找到)", foreground='orange')
+                    else:
+                        self.device_status_label.config(text=f"已连接 {len(device_options)} 台设备", foreground='green')
         else:
             self.device_combo['values'] = []
             self.device_combo.set("")
-            self.device_status_label.config(text="未检测到设备", foreground='red')
+            # 如果环境变量存在但未找到设备，显示特殊状态
+            if self.env_device_id:
+                self.device_status_label.config(text=f"环境变量设备 {self.env_device_id} 未连接", foreground='orange')
+            else:
+                self.device_status_label.config(text="未检测到设备", foreground='red')
             
         self._append_output(f"📱 扫描完成，发现 {len(self.connected_devices)} 台设备\n")
+        if self.env_device_id:
+            self._append_output(f"🔧 环境变量 PHONE_AGENT_DEVICE_ID: {self.env_device_id}\n")
+        
+
 
     def connect_adb_device(self):
         """智能ADB设备连接功能"""
+        # 检查是否已经有连接窗口打开
+        if self.adb_connection_window is not None and tk.Toplevel.winfo_exists(self.adb_connection_window):
+            self._append_output("⚠️ ADB连接窗口已经打开，请先关闭现有窗口\n")
+            # 将现有窗口置于前台
+            self.adb_connection_window.lift()
+            self.adb_connection_window.attributes('-topmost', True)
+            self.adb_connection_window.after(1000, lambda: self.adb_connection_window.attributes('-topmost', False))
+            return
+        
         self._append_output("🔍 正在检查设备连接状态...\n")
         
         try:
@@ -1051,63 +1234,81 @@ class PhoneAgentGUI:
             
             # 创建智能连接对话框
             dialog = tk.Toplevel(self.root)
+            self.adb_connection_window = dialog
             dialog.title("智能ADB连接")
-            dialog.geometry("500x400")
-            dialog.resizable(False, False)
+            dialog.geometry("500x600")
+            dialog.resizable(True, True)
             
             # 设置对话框始终在最前
             dialog.lift()
             dialog.attributes('-topmost', True)
             dialog.after(1000, lambda: dialog.attributes('-topmost', False))
             
+            # 绑定窗口关闭事件
+            dialog.protocol("WM_DELETE_WINDOW", lambda: self._on_adb_connection_window_close(dialog))
+            
             # 主框架
             main_frame = ttk.Frame(dialog, padding="20")
             main_frame.pack(fill=tk.BOTH, expand=True)
             
+            # 配置主框架权重，确保子组件能正确扩展
+            main_frame.rowconfigure(1, weight=1)  # 让设备状态区域可扩展
+            
             # 标题
             title_label = ttk.Label(main_frame, text="📱 ADB设备连接状态", 
                                    font=('Microsoft YaHei', 12, 'bold'))
-            title_label.pack(pady=(0, 15))
+            title_label.grid(row=0, column=0, pady=(0, 15), sticky=tk.N+tk.E+tk.W)
             
-            # 设备状态显示区域
+            # 设备状态显示区域 - 使用滚动文本框以适应多个设备
             status_frame = ttk.LabelFrame(main_frame, text="当前设备状态", padding="10")
-            status_frame.pack(fill=tk.X, pady=(0, 15))
+            status_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 15))
+            status_frame.columnconfigure(0, weight=1)
+            
+            # 创建滚动文本框来显示设备状态
+            from tkinter import scrolledtext
+            status_text = scrolledtext.ScrolledText(status_frame, height=8, width=50, 
+                                                   font=('Microsoft YaHei', 9), 
+                                                   wrap=tk.WORD, state=tk.DISABLED)
+            status_text.pack(fill=tk.BOTH, expand=True)
+            
+            # 构建设备状态文本
+            status_content = ""
             
             # USB设备状态
             if usb_devices:
-                usb_text = f"✅ USB设备: {len(usb_devices)} 台\n"
+                status_content += f"✅ USB设备: {len(usb_devices)} 台\n"
                 for device in usb_devices:
-                    usb_text += f"   • {device['id']}\n"
+                    status_content += f"   • {device['id']}\n"
             else:
-                usb_text = "❌ 未检测到USB设备"
+                status_content += "❌ 未检测到USB设备\n"
             
-            usb_label = ttk.Label(status_frame, text=usb_text, font=('Microsoft YaHei', 9))
-            usb_label.pack(anchor=tk.W, pady=2)
+            status_content += "\n"
             
             # 远程设备状态
             if remote_devices:
-                remote_text = f"✅ 远程设备: {len(remote_devices)} 台\n"
+                status_content += f"✅ 远程设备: {len(remote_devices)} 台\n"
                 for device in remote_devices:
-                    remote_text += f"   • {device['id']}\n"
+                    status_content += f"   • {device['id']}\n"
             else:
-                remote_text = "⚪ 未连接远程设备"
-                
-            remote_label = ttk.Label(status_frame, text=remote_text, font=('Microsoft YaHei', 9))
-            remote_label.pack(anchor=tk.W, pady=2)
+                status_content += "⚪ 未连接远程设备\n"
+            
+            status_content += "\n"
             
             # 离线设备状态
             if offline_devices:
-                offline_text = f"⚠️ 离线设备: {len(offline_devices)} 台\n"
+                status_content += f"⚠️ 离线设备: {len(offline_devices)} 台\n"
                 for device in offline_devices:
-                    offline_text += f"   • {device['id']}\n"
-                    
-                offline_label = ttk.Label(status_frame, text=offline_text, 
-                                         font=('Microsoft YaHei', 9), foreground='orange')
-                offline_label.pack(anchor=tk.W, pady=2)
+                    status_content += f"   • {device['id']}\n"
+            
+            # 显示设备状态
+            status_text.config(state=tk.NORMAL)
+            status_text.insert("1.0", status_content)
+            status_text.config(state=tk.DISABLED)
             
             # 操作按钮区域
             button_frame = ttk.LabelFrame(main_frame, text="连接选项", padding="10")
-            button_frame.pack(fill=tk.X, pady=(0, 15))
+            button_frame.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=(0, 15))
+            button_frame.columnconfigure(0, weight=1)
             
             def do_connect_usb():
                 """USB连接引导"""
@@ -1118,16 +1319,11 @@ class PhoneAgentGUI:
                     self._append_output("   3. 重新授权设备\n")
                 else:
                     self._append_output("📱 请使用USB线连接Android设备并开启USB调试\n")
-                dialog.destroy()
-                
-            def do_connect_remote():
-                """远程连接"""
-                dialog.destroy()
-                self.connect_remote_device()
+                self._on_adb_connection_window_close(dialog)
                 
             def do_connect_wireless_pair():
                 """无线调试配对连接"""
-                dialog.destroy()
+                self._on_adb_connection_window_close(dialog)
                 self.connect_wireless_pair_device()
                 
             def do_refresh_devices():
@@ -1135,7 +1331,7 @@ class PhoneAgentGUI:
                 self._append_output("🔄 正在重新扫描设备...\n")
                 self.refresh_devices()
                 dialog.after(1000, lambda: self.connect_adb_device())
-                dialog.destroy()
+                self._on_adb_connection_window_close(dialog)
             
             def do_restart_adb():
                 """重启ADB服务"""
@@ -1146,35 +1342,39 @@ class PhoneAgentGUI:
                     self._append_output("✅ ADB服务已重启\n")
                     self.refresh_devices()
                     dialog.after(1000, lambda: self.connect_adb_device())
-                    dialog.destroy()
+                    self._on_adb_connection_window_close(dialog)
                 except Exception as e:
                     self._append_output(f"❌ 重启ADB失败: {str(e)}\n")
             
             # 提供智能按钮建议
             buttons_row1 = ttk.Frame(button_frame)
-            buttons_row1.pack(fill=tk.X, pady=5)
+            buttons_row1.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=5)
+            buttons_row1.columnconfigure(0, weight=1)
+            
+            # 第一行按钮
+            row1_buttons = ttk.Frame(buttons_row1)
+            row1_buttons.pack(anchor=tk.W)
             
             if not usb_devices:
-                ttk.Button(buttons_row1, text="📱 USB连接帮助", 
+                ttk.Button(row1_buttons, text="📱 USB连接帮助", 
                           command=do_connect_usb, style='Success.TButton').pack(side=tk.LEFT, padx=(0, 8))
-            else:
-                ttk.Button(buttons_row1, text="🔄 检查USB连接", 
-                          command=do_connect_usb, style='Success.TButton').pack(side=tk.LEFT, padx=(0, 8))
-                          
-            ttk.Button(buttons_row1, text="📡 添加远程设备", 
-                      command=do_connect_remote, style='Success.TButton').pack(side=tk.LEFT, padx=(0, 8))
                       
-            ttk.Button(buttons_row1, text="🔗 无线调试配对", 
+            ttk.Button(row1_buttons, text="🔗 无线调试配对", 
                       command=do_connect_wireless_pair, style='Success.TButton').pack(side=tk.LEFT, padx=(0, 8))
             
+            # 第二行按钮
             buttons_row2 = ttk.Frame(button_frame)
-            buttons_row2.pack(fill=tk.X, pady=5)
+            buttons_row2.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=5)
+            buttons_row2.columnconfigure(0, weight=1)
             
-            ttk.Button(buttons_row2, text="🔄 重新扫描", 
+            row2_buttons = ttk.Frame(buttons_row2)
+            row2_buttons.pack(anchor=tk.W)
+            
+            ttk.Button(row2_buttons, text="🔄 重新扫描", 
                       command=do_refresh_devices, style='Success.TButton').pack(side=tk.LEFT, padx=(0, 8))
             
             if offline_devices or len(self.connected_devices) == 0:
-                ttk.Button(buttons_row2, text="🔧 重启ADB服务", 
+                ttk.Button(row2_buttons, text="🔧 重启ADB服务", 
                           command=do_restart_adb, style='Danger.TButton').pack(side=tk.LEFT, padx=(0, 8))
             
 
@@ -1195,12 +1395,25 @@ class PhoneAgentGUI:
         if not self.connected_devices:
             messagebox.showinfo("设备信息", "当前没有连接的设备")
             return
+        
+        # 检查是否已经有设备详情窗口打开
+        if self.device_details_window is not None and tk.Toplevel.winfo_exists(self.device_details_window):
+            self._append_output("⚠️ 设备详情窗口已经打开，请先关闭现有窗口\n")
+            # 将现有窗口置于前台
+            self.device_details_window.lift()
+            self.device_details_window.attributes('-topmost', True)
+            self.device_details_window.after(1000, lambda: self.device_details_window.attributes('-topmost', False))
+            return
             
         # 创建详情窗口
         details_window = tk.Toplevel(self.root)
+        self.device_details_window = details_window
         details_window.title("设备详细信息")
         details_window.geometry("600x400")
         details_window.resizable(True, True)
+        
+        # 绑定窗口关闭事件
+        details_window.protocol("WM_DELETE_WINDOW", lambda: self._on_device_details_window_close(details_window))
         
         # 创建文本框显示详细信息
         details_text = scrolledtext.ScrolledText(details_window, wrap=tk.WORD, 
@@ -1231,7 +1444,7 @@ class PhoneAgentGUI:
         button_frame = ttk.Frame(details_window, style='Card.TFrame')
         button_frame.pack(pady=10)
         
-        ttk.Button(button_frame, text="关闭", command=details_window.destroy, style='Danger.TButton').pack()
+        ttk.Button(button_frame, text="关闭", command=lambda: self._on_device_details_window_close(details_window), style='Danger.TButton').pack()
         
     def connect_device(self):
         """连接到指定IP的设备"""
@@ -1806,6 +2019,20 @@ class PhoneAgentGUI:
         self.qrcode_window = None
         self._append_output("✅ 二维码窗口已关闭\n")
     
+    def _on_adb_connection_window_close(self, dialog):
+        """ADB连接窗口关闭事件处理"""
+        dialog.destroy()
+        if dialog == self.adb_connection_window:
+            self.adb_connection_window = None
+        self._append_output("✅ ADB连接窗口已关闭\n")
+    
+    def _on_device_details_window_close(self, dialog):
+        """设备详情窗口关闭事件处理"""
+        dialog.destroy()
+        if dialog == self.device_details_window:
+            self.device_details_window = None
+        self._append_output("✅ 设备详情窗口已关闭\n")
+    
     def connect_wireless_pair_device(self):
         """无线调试配对连接（Android 11+）"""
         dialog = tk.Toplevel(self.root)
@@ -1963,6 +2190,66 @@ class PhoneAgentGUI:
         """设备选择变化时自动保存配置"""
         self.on_config_change()
     
+    def on_device_type_change(self):
+        """设备类型变化时更新相关设置"""
+        device_type = self.device_type.get()
+        
+        # 将中文选项转换为英文值用于内部处理
+        device_type_en = "adb" if device_type == "安卓" else "hdc"
+        
+        # 清空设备列表
+        self.connected_devices = []
+        self.selected_device_id.set("")
+        
+        # 更新设备管理区域的标题和按钮
+        if hasattr(self, 'adb_frame'):
+            if hasattr(self, 'adb_control_frame'):
+                # 获取所有按钮，保存它们的属性
+                buttons_info = []
+                for widget in self.adb_control_frame.winfo_children():
+                    if isinstance(widget, ttk.Button):
+                        text = widget.cget('text')
+                        is_visible = widget.winfo_viewable()
+                        buttons_info.append((widget, text, is_visible))
+                
+                # 处理每个按钮
+                for widget, text, is_visible in buttons_info:
+                    if device_type_en == "hdc":
+                        self.adb_frame.config(text="📱 HDC设备管理")
+                        # HDC模式：修改连接按钮，隐藏ADB键盘按钮
+                        if "连接ADB" in text:
+                            widget.config(text="🔗 连接HDC")
+                        elif "安装ADB键盘" in text and is_visible:
+                            widget.pack_forget()
+                    else:
+                        self.adb_frame.config(text="📱 ADB设备管理")
+                        # ADB模式：修改连接按钮，显示ADB键盘按钮
+                        if "连接HDC" in text:
+                            widget.config(text="🔗 连接ADB")
+                        elif "安装ADB键盘" in text and not is_visible:
+                            widget.pack(side=tk.LEFT, padx=(0, 8))
+                
+                # 确保关注公众号按钮始终在最后
+                for widget, text, is_visible in buttons_info:
+                    if "关注公众号" in text:
+                        # 重新打包到最后
+                        widget.pack_forget()
+                        widget.pack(side=tk.LEFT, padx=(0, 8))
+                        break
+        
+        # 更新设备扫描命令和标签
+        if hasattr(self, 'device_status_label'):
+            device_type_text = "HDC设备" if device_type_en == "hdc" else "ADB设备"
+            self.device_status_label.config(text=f"未连接{device_type_text}")
+        
+        # 刷新设备列表
+        self.refresh_devices()
+        
+        # 自动保存配置
+        self.on_config_change()
+    
+
+    
     def _auto_save_config(self):
         """自动保存配置（静默保存，不显示提示）"""
         try:
@@ -1972,7 +2259,8 @@ class PhoneAgentGUI:
                 'apikey': self.apikey.get(),
                 'task': self.task_text.get("1.0", tk.END).strip(),
                 'max_steps': int(self.max_steps.get() or 200),
-                'selected_device': self.selected_device_id.get(),
+                'device_type': "adb" if self.device_type.get() == "安卓" else "hdc",
+                'selected_device': self.selected_device_id.get(),  # 保存用户选择的设备ID（不是环境变量）
                 'remote_connection': getattr(self, 'last_remote_connection', {
                     'ip': '192.168.1.100',
                     'port': '5555'
@@ -2005,7 +2293,8 @@ class PhoneAgentGUI:
                 'apikey': self.apikey.get(),
                 'task': self.task_text.get("1.0", tk.END).strip(),
                 'max_steps': int(self.max_steps.get() or 200),
-                'selected_device': self.selected_device_id.get(),
+                'device_type': "adb" if self.device_type.get() == "安卓" else "hdc",
+                'selected_device': self.selected_device_id.get(),  # 保存用户选择的设备ID（不是环境变量）
                 'remote_connection': getattr(self, 'last_remote_connection', {
                     'ip': '192.168.1.100',
                     'port': '5555'
