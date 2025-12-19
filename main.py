@@ -30,7 +30,7 @@ from phone_agent.device_factory import DeviceType, get_device_factory, set_devic
 from phone_agent.model import ModelConfig
 
 
-def check_system_requirements(device_type: DeviceType = DeviceType.ADB) -> bool:
+def check_system_requirements(device_type: DeviceType = DeviceType.ADB, device_id: str = None) -> bool:
     """
     Check system requirements before running the agent.
 
@@ -134,7 +134,18 @@ def check_system_requirements(device_type: DeviceType = DeviceType.ADB) -> bool:
                 device_ids = [d.split("\t")[0] for d in devices]
             else:
                 device_ids = [d.strip() for d in devices]
-            print(f"✅ OK ({len(devices)} device(s): {', '.join(device_ids)})")
+            
+            # Check if specific device_id is provided and exists
+            if device_id:
+                if device_id in device_ids:
+                    print(f"✅ OK (found device {device_id} among {len(devices)} device(s))")
+                else:
+                    print(f"❌ FAILED")
+                    print(f"   Error: Specified device '{device_id}' not found.")
+                    print(f"   Available devices: {', '.join(device_ids)}")
+                    all_passed = False
+            else:
+                print(f"✅ OK ({len(devices)} device(s): {', '.join(device_ids)})")
     except subprocess.TimeoutExpired:
         print("❌ FAILED")
         print(f"   Error: {tool_name} command timed out.")
@@ -154,8 +165,14 @@ def check_system_requirements(device_type: DeviceType = DeviceType.ADB) -> bool:
     if device_type == DeviceType.ADB:
         print("3. Checking ADB Keyboard...", end=" ")
         try:
+            # Use specific device if provided, otherwise use default
+            adb_cmd = ["adb"]
+            if device_id:
+                adb_cmd.extend(["-s", device_id])
+            adb_cmd.extend(["shell", "ime", "list", "-s"])
+            
             result = subprocess.run(
-                ["adb", "shell", "ime", "list", "-s"],
+                adb_cmd,
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -522,7 +539,7 @@ def main():
         return
 
     # Run system requirements check before proceeding
-    if not check_system_requirements(device_type):
+    if not check_system_requirements(device_type, args.device_id):
         sys.exit(1)
 
     # Check model API connectivity and model availability

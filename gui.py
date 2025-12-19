@@ -27,7 +27,7 @@ import re
 class PhoneAgentGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("鸡哥手机助手 v1.0 - 更多好玩的工具请关注微信公众号：菜芽创作小助手")
+        self.root.title("鸡哥手机助手 v1.1 - 更多好玩的工具请关注微信公众号：菜芽创作小助手")
         self.root.geometry("1000x750")
         self.root.minsize(900, 650)
         
@@ -481,19 +481,20 @@ class PhoneAgentGUI:
 
     def _run_agent_direct(self, base_url, model, apikey, task, selected_device):
         """直接运行代理（打包环境）"""
+        # 导入必要模块
+        from phone_agent.agent import PhoneAgent, AgentConfig
+        from phone_agent.model import ModelConfig
+        from phone_agent.device_factory import DeviceType, set_device_type
+        # 从main.py导入检查函数
+        import main
+        
+        # 使用线程安全的输出函数 - 移到try块外部
+        def safe_output(text):
+            if text:
+                # 直接插入到GUI，不做任何格式化处理
+                self.root.after(0, self._insert_direct_text, text)
+        
         try:
-            # 导入必要模块
-            from phone_agent.agent import PhoneAgent, AgentConfig
-            from phone_agent.model import ModelConfig
-            from phone_agent.device_factory import DeviceType, set_device_type
-            # 从main.py导入检查函数
-            import main
-            
-            # 使用线程安全的输出函数
-            def safe_output(text):
-                if text:
-                    # 直接插入到GUI，不做任何格式化处理
-                    self.root.after(0, self._insert_direct_text, text)
             
             # 获取当前设备类型
             device_type_value = self.device_type.get()
@@ -502,9 +503,14 @@ class PhoneAgentGUI:
             set_device_type(device_type)
             safe_output(f"🔗 设备类型: {device_type_str.upper()}\n")
             
+            # 解析设备ID（必须在检查系统要求之前）
+            device_id = None
+            if selected_device:
+                device_id = selected_device.split(' ')[0]
+            
             # 先进行系统要求检查
             safe_output("🔍 检查系统要求...\n")
-            if not main.check_system_requirements(device_type):
+            if not main.check_system_requirements(device_type, device_id):
                 device_text = "HDC" if device_type_str == "hdc" else "ADB"
                 safe_output(f"❌ 系统要求检查失败，请检查{device_text}和设备连接，以及相关键盘设置\n")
                 self.root.after(0, self._process_finished, -1)
@@ -517,14 +523,15 @@ class PhoneAgentGUI:
                 self.root.after(0, self._process_finished, -1)
                 return
             
-            # 解析设备ID
-            device_id = None
-            if selected_device:
-                device_id = selected_device.split(' ')[0]
+
             
             # 在打包环境中设置subprocess创建标志，避免弹窗
             import subprocess
             import os
+            
+            # 设置环境变量，让main.py相关函数能够获取到设备ID
+            if device_id:
+                os.environ["PHONE_AGENT_DEVICE_ID"] = device_id
             if hasattr(subprocess, 'CREATE_NO_WINDOW'):
                 original_popen = subprocess.Popen
                 def patched_popen(*args, **kwargs):
