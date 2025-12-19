@@ -11,17 +11,18 @@ def create_spec_file():
     """创建 PyInstaller spec 文件"""
     spec_content = '''# -*- mode: python ; coding: utf-8 -*-
 
-block_cipher = None
 
 a = Analysis(
     ['gui.py'],
-    pathex=['.'],
+    pathex=[],
     binaries=[],
     datas=[
         ('adb.exe', '.'),
+        ('hdc.exe', '.'),
         ('AdbWinApi.dll', '.'),
         ('AdbWinUsbApi.dll', '.'),
         ('libwinpthread-1.dll', '.'),
+        ('libusb_shared.dll', '.'),
         ('ADBKeyboard.apk', '.'),
         ('phone_agent', 'phone_agent'),
         ('main.py', '.'),
@@ -65,19 +66,15 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
     noarchive=False,
+    optimize=0,
 )
-
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
     a.scripts,
     a.binaries,
-    a.zipfiles,
     a.datas,
     [],
     name='PhoneAgentGUI',
@@ -93,7 +90,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
 )
 '''
     
@@ -120,9 +116,11 @@ def build_exe():
         '--windowed',
         '--name', 'PhoneAgentGUI',
         '--add-data', 'adb.exe;.',
+        '--add-data', 'hdc.exe;.',
         '--add-data', 'AdbWinApi.dll;.',
         '--add-data', 'AdbWinUsbApi.dll;.',
         '--add-data', 'libwinpthread-1.dll;.',
+        '--add-data', 'libusb_shared.dll;.',
         '--add-data', 'ADBKeyboard.apk;.',
         '--add-data', 'phone_agent;phone_agent',
         '--add-data', 'main.py;.',
@@ -175,9 +173,10 @@ def build_exe():
                 print(f"📊 文件大小: {file_size:.1f} MB")
                 print("\n🎉 可以将 PhoneAgentGUI.exe 复制到其他电脑运行！")
                 print("\n📝 注意事项：")
-                print("1. 确保 ADB 工具和相关文件已正确打包")
-                print("2. 运行时可能需要管理员权限")
-                print("3. 首次运行可能需要配置 API Key")
+                print("1. 确保 ADB 和 HDC 工具已正确打包")
+                print("2. 鸿蒙设备需要确保 hdc.exe 文件存在")
+                print("3. 运行时可能需要管理员权限")
+                print("4. 首次运行可能需要配置 API Key")
             else:
                 print("❌ exe 文件未找到")
             

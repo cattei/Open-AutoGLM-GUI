@@ -24,7 +24,7 @@
 
 ### 方法1: 使用Python脚本
 ```bash
-python gui.py   
+python run_gui.py   
 ```
 
 ### 方法2: 直接运行GUI   
@@ -59,8 +59,12 @@ PhoneAgentGUI.exe
 ## 注意事项
 
 1. **API Key安全**: 请妥善保管您的API Key，不要分享给他人
-2. **设备连接**: 确保您的Android设备已连接并开启USB调试
-3. **ADB Keyboard**: 确保手机上已安装ADB Keyboard应用
+2. **设备连接**: 
+   - 安卓设备：确保设备已连接并开启USB调试
+   - 鸿蒙设备：确保设备已连接并开启HDC调试
+3. **工具安装**: 
+   - 安卓设备：确保已安装ADB工具和ADB Keyboard应用
+   - 鸿蒙设备：确保已下载hdc.exe并放在正确位置
 4. **网络连接**: 确保网络连接正常，能够访问API服务器
 
 ## 错误处理
@@ -71,9 +75,6 @@ PhoneAgentGUI.exe
   - 网络连接失败
   - 设备未连接
   - ADB工具未安装
-  - 设备未开启USB调试
-  - 设备未安装ADB Keyboard应用
-  - 设备未开启USB调试（安全设置）
 
 ## 配置文件
 
@@ -92,6 +93,19 @@ PhoneAgentGUI.exe
 - Python 3.7+
 - tkinter (通常随Python一起安装)
 - 已配置好的Phone Agent环境（包括ADB工具等）
+
+## 设备支持
+
+### 安卓设备（ADB）
+- 需要安装ADB工具
+- 下载地址：https://developer.android.com/studio/releases/platform-tools
+- 确保手机已开启USB调试并安装ADB Keyboard
+
+### 鸿蒙设备（HDC）
+- 需要下载HDC工具（hdc.exe）
+- 下载地址：https://gitee.com/openharmony/docs 或从HarmonyOS SDK获取
+- 将hdc.exe放置在程序同一目录下或系统PATH中
+- 确保设备已开启开发者模式中的HDC调试
 
 ## 快速开始示例
 
