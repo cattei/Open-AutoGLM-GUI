@@ -30,9 +30,9 @@ from task_simplifier import TaskSimplifierManager
 class PhoneAgentGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("鸡哥手机助手 v1.2 - 更多好玩的工具请关注微信公众号：菜芽创作小助手")
-        self.root.geometry("1000x750")
-        self.root.minsize(900, 650)
+        self.root.title("鸡哥手机助手 v1.3 - 更多好玩的工具请关注微信公众号：菜芽创作小助手")
+        self.root.geometry("1200x750")
+        self.root.minsize(1100, 650)
         
         # 显示快速启动提示
         self.show_startup_message()
@@ -46,6 +46,7 @@ class PhoneAgentGUI:
         self.apikey = tk.StringVar(value="your-bigmodel-api-key")
         self.task = tk.StringVar(value="输入你想要执行的任务，例如：打开美团搜索附近的火锅店")
         self.max_steps = tk.StringVar(value="200")
+        self.temperature = tk.StringVar(value="0.0")  # 新增temperature参数
         self.device_type = tk.StringVar(value="安卓")  # 默认为安卓
         
         self.process = None
@@ -68,6 +69,11 @@ class PhoneAgentGUI:
 
         # 初始化任务精简器
         self.task_simplifier = TaskSimplifierManager()
+        
+        # 任务历史记录
+        self.task_history_file = "task_history.json"
+        self.task_history = []
+        self.load_task_history()
         
         # 快速创建基础界面
         self.create_basic_widgets()
@@ -137,6 +143,7 @@ class PhoneAgentGUI:
             task_text = config.get('task', '输入你想要执行的任务，例如：打开美团搜索附近的火锅店')
             self.task.set(task_text)
             self.max_steps.set(str(config.get('max_steps', '200')))
+            self.temperature.set(str(config.get('temperature', '0.0')))  # 添加temperature加载
             device_type_value = config.get('device_type', 'adb')
             # 将保存的英文值转换为中文显示
             if device_type_value == 'adb':
@@ -167,6 +174,57 @@ class PhoneAgentGUI:
             print(f"应用配置失败: {str(e)}")
             if hasattr(self, 'status_var'):
                 self.status_var.set("⚠️ 配置应用失败")
+    
+    def _calculate_center_position(self, child_width, child_height):
+        """计算相对于主窗口的居中位置"""
+        # 确保主窗口完全更新
+        self.root.update_idletasks()
+        
+        # 获取主窗口的位置和大小
+        main_x = self.root.winfo_x()
+        main_y = self.root.winfo_y()
+        main_width = self.root.winfo_width()
+        main_height = self.root.winfo_height()
+        
+        # 计算居中位置
+        center_x = main_x + (main_width // 2) - (child_width // 2)
+        center_y = main_y + (main_height // 2) - (child_height // 2)
+        
+        # 确保窗口不会超出屏幕边界
+        import tkinter as tk
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        
+        if center_x < 0:
+            center_x = 0
+        if center_y < 0:
+            center_y = 0
+        if center_x + child_width > screen_width:
+            center_x = screen_width - child_width
+        if center_y + child_height > screen_height:
+            center_y = screen_height - child_height
+        
+        return center_x, center_y
+    
+    def center_window(self, window, width=None, height=None):
+        """将窗口居中显示在主窗口中间"""
+        # 使用计算方法获取位置
+        if width and height:
+            center_x, center_y = self._calculate_center_position(width, height)
+            window.geometry(f"{width}x{height}+{center_x}+{center_y}")
+        else:
+            window.update_idletasks()
+            child_width = window.winfo_width()
+            child_height = window.winfo_height()
+            
+            # 如果窗口还没有实际大小，使用默认值
+            if child_width <= 1:
+                child_width = 500
+            if child_height <= 1:
+                child_height = 400
+                
+            center_x, center_y = self._calculate_center_position(child_width, child_height)
+            window.geometry(f"+{center_x}+{center_y}")
                 
     def _create_default_config(self):
         """创建默认配置"""
@@ -260,11 +318,21 @@ class PhoneAgentGUI:
             self.task_text = tk.Text(task_frame, width=50, height=2, font=('Microsoft YaHei', 9), wrap=tk.WORD)
             self.task_text.grid(row=0, column=0, sticky=(tk.W, tk.E))
             
+            # 任务操作按钮框架
+            task_buttons_frame = ttk.Frame(task_frame)
+            task_buttons_frame.grid(row=0, column=1, padx=(5, 0))
+            
             # 任务精简按钮
-            self.simplify_task_button = ttk.Button(task_frame, text="🤖 AI润色", 
+            self.simplify_task_button = ttk.Button(task_buttons_frame, text="🤖 AI润色", 
                                                  command=self.show_task_simplifier, 
                                                  style='Success.TButton')
             self.simplify_task_button.grid(row=0, column=1, padx=(5, 0))
+            
+            # 任务历史按钮（放在AI润色按钮左边）
+            self.task_history_button = ttk.Button(task_buttons_frame, text="📚", 
+                                                 command=self.show_task_history, 
+                                                 width=2)
+            self.task_history_button.grid(row=0, column=0)
             
             # 设置初始任务文本
             self.task_text.insert("1.0", self.task.get())
@@ -274,7 +342,8 @@ class PhoneAgentGUI:
             settings_row_frame = ttk.Frame(config_frame)
             settings_row_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=3)
             settings_row_frame.columnconfigure(1, weight=1)
-            settings_row_frame.columnconfigure(4, weight=1)
+            settings_row_frame.columnconfigure(3, weight=1)
+            settings_row_frame.columnconfigure(5, weight=1)
             
             # Device Type (左半部分) - 精确对齐Task输入框
             device_type_frame = ttk.Frame(settings_row_frame)
@@ -283,7 +352,7 @@ class PhoneAgentGUI:
             device_type_frame.columnconfigure(1, weight=1)  # 输入框列拉伸
             
             # 标签，与配置区域的标签对齐
-            ttk.Label(device_type_frame, text="🔗 设备类型:", font=('Microsoft YaHei', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
+            ttk.Label(device_type_frame, text="🔗设备类型:", font=('Microsoft YaHei', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
             
             # 输入框和说明文字的组合 - 使用10px的padding与Task输入框对齐
             device_type_combo_frame = ttk.Frame(device_type_frame)
@@ -296,14 +365,33 @@ class PhoneAgentGUI:
             self.device_type_combo.bind('<<ComboboxSelected>>', lambda e: self.on_device_type_change())
             ttk.Label(device_type_combo_frame, text="（选择设备系统类型）", font=('Microsoft YaHei', 8), foreground='gray').grid(row=0, column=1, padx=(3, 0))
             
+            # Temperature (右半部分) - 在最大步数右边
+            temperature_frame = ttk.Frame(settings_row_frame)
+            temperature_frame.grid(row=0, column=5, columnspan=1, sticky=(tk.W, tk.E), padx=(10, 0))
+            temperature_frame.columnconfigure(0, weight=0)
+            temperature_frame.columnconfigure(1, weight=1)
+            
+            # 标签，与设备类型和最大步数保持完全一致的间距
+            ttk.Label(temperature_frame, text="🌡️温度值:", font=('Microsoft YaHei', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
+            
+            # 输入框和说明文字的组合
+            temperature_entry_frame = ttk.Frame(temperature_frame)
+            temperature_entry_frame.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(10, 0))
+            temperature_entry_frame.columnconfigure(0, weight=0)
+            
+            self.temperature_entry = ttk.Entry(temperature_entry_frame, textvariable=self.temperature, width=8, font=('Microsoft YaHei', 9))
+            self.temperature_entry.grid(row=0, column=0, sticky=tk.W)
+            self.temperature_entry.bind("<FocusOut>", lambda e: self.validate_temperature())
+            ttk.Label(temperature_entry_frame, text="（控制随机性，0.0-1.0）", font=('Microsoft YaHei', 8), foreground='gray').grid(row=0, column=1, padx=(3, 0))
+            
             # Max Steps (右半部分)
             max_steps_frame = ttk.Frame(settings_row_frame)
-            max_steps_frame.grid(row=0, column=2, columnspan=2, sticky=(tk.W, tk.E))
+            max_steps_frame.grid(row=0, column=3, columnspan=2, sticky=(tk.W, tk.E), padx=(10, 0))
             max_steps_frame.columnconfigure(0, weight=0)
             max_steps_frame.columnconfigure(1, weight=1)
             
             # 标签，与配置区域的标签对齐
-            ttk.Label(max_steps_frame, text="🔢 最大步数:", font=('Microsoft YaHei', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
+            ttk.Label(max_steps_frame, text="🔢最大步数:", font=('Microsoft YaHei', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
             
             # 输入框和说明文字的组合 - 使用10px的padding与Task输入框对齐
             max_steps_entry_frame = ttk.Frame(max_steps_frame)
@@ -325,6 +413,9 @@ class PhoneAgentGUI:
             
             # Max Steps变化时自动保存
             self.max_steps_entry.bind("<KeyRelease>", lambda e: self.on_config_change())
+            
+            # Temperature变化时自动保存
+            self.temperature_entry.bind("<KeyRelease>", lambda e: self.on_config_change())
             
             # ADB设备区域
             self.adb_frame = ttk.LabelFrame(self.main_frame, text="📱 ADB设备管理", style='Card.TFrame', padding="8")
@@ -475,6 +566,9 @@ class PhoneAgentGUI:
         self.stop_button.config(state=tk.NORMAL)
         self.status_var.set("🔄 正在执行任务...")
         self.clear_output()
+        
+        # 添加任务到历史记录
+        self.add_task_to_history(task)
             
         # 获取设备ID，优先使用环境变量，其次是用户选择
         selected_device = self.env_device_id or self.selected_device_id.get()
@@ -565,7 +659,8 @@ class PhoneAgentGUI:
             model_config = ModelConfig(
                 base_url=base_url,
                 model_name=model,
-                api_key=apikey
+                api_key=apikey,
+                temperature=float(self.temperature.get() or 0.0)
             )
             
             # 获取打包环境中的ADB/HDC路径
@@ -795,12 +890,17 @@ class PhoneAgentGUI:
     def save_config(self):
         """保存配置到文件"""
         try:
+            # 验证温度值
+            if not self.validate_temperature():
+                return  # 如果温度值无效，不保存配置
+                
             config = {
                 'base_url': self.base_url.get(),
                 'model': self.model.get(),
                 'apikey': self.apikey.get(),
                 'task': self.task_text.get("1.0", tk.END).strip(),
                 'max_steps': int(self.max_steps.get() or 200),
+                'temperature': float(self.temperature.get() or 0.0),
                 'device_type': "adb" if self.device_type.get() == "安卓" else "hdc",
                 'selected_device': self.selected_device_id.get(),  # 保存用户选择的设备ID（不是环境变量）
                 'remote_connection': getattr(self, 'last_remote_connection', {
@@ -826,12 +926,21 @@ class PhoneAgentGUI:
     def save_config_silent(self):
         """静默保存配置到文件，不显示消息"""
         try:
+            # 验证温度值，如果无效则跳过保存
+            try:
+                temp_value = float(self.temperature.get() or 0.0)
+                if temp_value < 0.0 or temp_value > 1.0:
+                    return  # 温度值无效，跳过保存
+            except ValueError:
+                return  # 温度值不是有效数字，跳过保存
+                
             config = {
                 'base_url': self.base_url.get(),
                 'model': self.model.get(),
                 'apikey': self.apikey.get(),
                 'task': self.task_text.get("1.0", tk.END).strip(),
                 'max_steps': int(self.max_steps.get() or 200),
+                'temperature': temp_value,
                 'device_type': "adb" if self.device_type.get() == "安卓" else "hdc",
                 'selected_device': self.selected_device_id.get(),  # 保存用户选择的设备ID（不是环境变量）
                 'remote_connection': getattr(self, 'last_remote_connection', {
@@ -867,6 +976,9 @@ class PhoneAgentGUI:
                 if hasattr(self, 'task_text'):
                     self.task_text.delete("1.0", tk.END)
                     self.task_text.insert("1.0", task_text)
+                
+                # 加载temperature参数
+                self.temperature.set(str(config.get('temperature', 0.0)))
                 
                 # 恢复选中的设备，优先使用环境变量
                 selected_device = self.env_device_id or config.get('selected_device', '')
@@ -912,6 +1024,9 @@ class PhoneAgentGUI:
                 self.task_text.delete("1.0", tk.END)
                 self.task_text.insert("1.0", task_text)
                 
+                # 加载temperature参数
+                self.temperature.set(str(config.get('temperature', 0.0)))
+                
                 # 恢复选中的设备，优先使用环境变量
                 selected_device = self.env_device_id or config.get('selected_device', '')
                 if selected_device:
@@ -935,6 +1050,29 @@ class PhoneAgentGUI:
         except Exception as e:
             messagebox.showerror("错误", f"加载配置失败: {str(e)}")
             self.status_var.set("❌ 加载配置失败")
+    
+    def on_config_change(self):
+        """配置变化时自动保存（静默保存）"""
+        try:
+            self.save_config_silent()
+        except Exception:
+            pass  # 静默忽略错误，不影响用户体验
+    
+    def validate_temperature(self):
+        """验证温度值是否在0.0-1.0范围内"""
+        try:
+            temp_value = float(self.temperature.get())
+            if temp_value < 0.0 or temp_value > 1.0:
+                messagebox.showwarning("温度值错误", "温度值必须在0.0-1.0之间\n请重新输入有效的温度值")
+                # 重置为默认值0.0
+                self.temperature.set("0.0")
+                return False
+            return True
+        except ValueError:
+            messagebox.showwarning("温度值错误", "请输入有效的数字\n温度值必须在0.0-1.0之间")
+            # 重置为默认值0.0
+            self.temperature.set("0.0")
+            return False
         
     def _process_finished(self, return_code):
         self.running = False
@@ -1293,11 +1431,14 @@ class PhoneAgentGUI:
             remote_devices = [d for d in self.connected_devices if d['status'] == 'device' and ':' in d['id']]
             offline_devices = [d for d in self.connected_devices if d['status'] == 'offline']
             
-            # 创建智能连接对话框
+            # 先计算居中位置
+            center_x, center_y = self._calculate_center_position(500, 600)
+            
+            # 创建智能连接对话框，直接设置位置避免闪现
             dialog = tk.Toplevel(self.root)
             self.adb_connection_window = dialog
             dialog.title(f"智能{device_display}连接")
-            dialog.geometry("500x600")
+            dialog.geometry(f"500x600+{center_x}+{center_y}")
             dialog.resizable(True, True)
             
             # 设置对话框始终在最前
@@ -1650,6 +1791,9 @@ class PhoneAgentGUI:
         details_window.geometry("600x400")
         details_window.resizable(True, True)
         
+        # 居中显示在主窗口中间
+        self.center_window(details_window)
+        
         # 绑定窗口关闭事件
         details_window.protocol("WM_DELETE_WINDOW", lambda: self._on_device_details_window_close(details_window))
         
@@ -1693,6 +1837,9 @@ class PhoneAgentGUI:
         dialog.title("连接设备")
         dialog.geometry("400x180")
         dialog.resizable(False, False)
+        
+        # 居中显示在主窗口中间
+        self.center_window(dialog)
         
         # 设置对话框样式和配色，与主窗口保持一致
         dialog.configure(bg='#f0f0f0')
@@ -1873,11 +2020,8 @@ class PhoneAgentGUI:
         dialog.geometry("450x320")
         dialog.resizable(True, True)
         
-        # 设置窗口居中显示
-        dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (450 // 2)
-        y = (dialog.winfo_screenheight() // 2) - (320 // 2)
-        dialog.geometry(f"450x320+{x}+{y}")
+        # 居中显示在主窗口中间
+        self.center_window(dialog)
         
         # 主框架
         main_frame = ttk.Frame(dialog, padding="15")
@@ -2090,10 +2234,13 @@ class PhoneAgentGUI:
             
             self._append_output("📱 正在加载微信公众号二维码...\n")
             
-            # 创建二维码显示窗口
+            # 先计算居中位置
+            center_x, center_y = self._calculate_center_position(500, 550)
+            
+            # 创建二维码显示窗口，直接设置位置避免闪现
             self.qrcode_window = tk.Toplevel(self.root)
             self.qrcode_window.title("关注微信公众号 - 菜芽创作小助手")
-            self.qrcode_window.geometry("500x550")
+            self.qrcode_window.geometry(f"500x550+{center_x}+{center_y}")
             self.qrcode_window.resizable(False, False)
             
             # 设置窗口始终在最前
@@ -2305,11 +2452,8 @@ class PhoneAgentGUI:
         dialog.geometry("450x320")
         dialog.resizable(True, True)
         
-        # 设置窗口居中显示
-        dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (450 // 2)
-        y = (dialog.winfo_screenheight() // 2) - (320 // 2)
-        dialog.geometry(f"450x320+{x}+{y}")
+        # 居中显示在主窗口中间
+        self.center_window(dialog)
         
         # 主框架
         main_frame = ttk.Frame(dialog, padding="15")
@@ -2438,6 +2582,9 @@ class PhoneAgentGUI:
         dialog.title("远程HDC连接")
         dialog.geometry("500x250")
         dialog.resizable(False, False)
+        
+        # 居中显示在主窗口中间
+        self.center_window(dialog)
         
         # 设置对话框样式和配色，与主窗口保持一致
         dialog.configure(bg='#f0f0f0')
@@ -2576,11 +2723,8 @@ class PhoneAgentGUI:
         # 加载上次选择的AI平台
         last_platform = self._load_last_selected_platform()
         
-        # 居中显示
-        dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
-        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
-        dialog.geometry(f"+{x}+{y}")
+        # 居中显示在主窗口中间
+        self.center_window(dialog)
         
         # 创建主容器，无边距
         main_container = ttk.Frame(dialog)
@@ -3197,6 +3341,7 @@ class PhoneAgentGUI:
                 'apikey': self.apikey.get(),
                 'task': self.task_text.get("1.0", tk.END).strip(),
                 'max_steps': int(self.max_steps.get() or 200),
+                'temperature': float(self.temperature.get() or 0.0),
                 'device_type': "adb" if self.device_type.get() == "安卓" else "hdc",
                 'selected_device': self.selected_device_id.get(),  # 保存用户选择的设备ID（不是环境变量）
                 'remote_connection': getattr(self, 'last_remote_connection', {
@@ -3401,6 +3546,7 @@ class PhoneAgentGUI:
                 'apikey': self.apikey.get(),
                 'task': self.task_text.get("1.0", tk.END).strip(),
                 'max_steps': int(self.max_steps.get() or 200),
+                'temperature': float(self.temperature.get() or 0.0),
                 'device_type': "adb" if self.device_type.get() == "安卓" else "hdc",
                 'selected_device': self.selected_device_id.get(),  # 保存用户选择的设备ID（不是环境变量）
                 'remote_connection': getattr(self, 'last_remote_connection', {
@@ -3415,6 +3561,9 @@ class PhoneAgentGUI:
             
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
+            
+            # 保存任务历史记录
+            self.save_task_history()
                 
         except Exception:
             pass  # 静默忽略错误，确保程序能正常关闭
@@ -3462,6 +3611,213 @@ class PhoneAgentGUI:
                 json.dump(config, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"保存上次选择的AI平台失败: {e}")
+
+
+    def load_task_history(self):
+        """加载任务历史记录"""
+        try:
+            if os.path.exists(self.task_history_file):
+                with open(self.task_history_file, 'r', encoding='utf-8') as f:
+                    self.task_history = json.load(f)
+        except Exception as e:
+            print(f"加载任务历史失败: {e}")
+            self.task_history = []
+    
+    def save_task_history(self):
+        """保存任务历史记录"""
+        try:
+            with open(self.task_history_file, 'w', encoding='utf-8') as f:
+                json.dump(self.task_history, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"保存任务历史失败: {e}")
+    
+    def add_task_to_history(self, task):
+        """添加任务到历史记录"""
+        try:
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            task_record = {
+                'task': task,
+                'timestamp': current_time,
+                'id': len(self.task_history) + 1
+            }
+            
+            # 添加到历史记录开头
+            self.task_history.insert(0, task_record)
+            
+            # 保持历史记录不超过50条
+            if len(self.task_history) > 50:
+                self.task_history = self.task_history[:50]
+            
+            self.save_task_history()
+            
+        except Exception as e:
+            print(f"添加任务历史失败: {e}")
+    
+    def show_task_history(self):
+        """显示任务历史窗口"""
+        # 创建历史记录窗口
+        history_window = tk.Toplevel(self.root)
+        history_window.title("📚 任务历史记录")
+        history_window.geometry("900x550")
+        history_window.transient(self.root)
+        history_window.grab_set()
+        
+        # 居中显示窗口
+        self.center_window(history_window)
+        
+ # 主框架
+        main_frame = ttk.Frame(history_window, padding="15")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # 标题
+        title_frame = ttk.Frame(main_frame)
+        title_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(title_frame, text="📚 任务历史记录", 
+                 font=('Microsoft YaHei', 14, 'bold')).pack(side=tk.LEFT)
+        
+        # 创建表格框架来包含tree和滚动条
+        table_frame = ttk.Frame(main_frame)
+        table_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        
+        # 创建Treeview显示历史记录，启用多选
+        columns = ('ID', '时间', '任务')
+        tree = ttk.Treeview(table_frame, columns=columns, show='tree headings', height=12, selectmode='extended')
+        
+        # 设置列标题和宽度
+        tree.heading('#0', text='')
+        tree.heading('ID', text='ID')
+        tree.heading('时间', text='执行时间')
+        tree.heading('任务', text='任务内容')
+        
+        tree.column('#0', width=0, stretch='NO')  # 隐藏树形列
+        tree.column('ID', width=50, anchor='center')
+        tree.column('时间', width=150, anchor='center')
+        tree.column('任务', width=600, anchor='w')
+        
+        # 添加滚动条
+        scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+        
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # 填充数据
+        for record in self.task_history:
+            # 显示完整的任务内容，仅在表格中适当截断用于显示
+            task_content = record.get('task', '')
+            display_task = task_content
+            if len(display_task) > 100:
+                display_task = display_task[:97] + "..."
+            
+            tree.insert('', 'end', values=(
+                record.get('id', ''),
+                record.get('timestamp', ''),
+                display_task
+            ))
+        
+        # 绑定双击事件
+        tree.bind('<Double-1>', lambda e: self.use_task_from_history(history_window, tree))
+        
+        # 绑定ESC键关闭窗口
+        history_window.bind('<Escape>', lambda e: history_window.destroy())
+        
+        # 说明文字和按钮框架
+        bottom_frame = ttk.Frame(main_frame)
+        bottom_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        # 说明文字
+        ttk.Label(bottom_frame, text="提示：Ctrl+点击可多选 | 双击可快速使用 | ESC关闭窗口", 
+                 font=('Microsoft YaHei', 8), foreground='gray').pack(pady=(0, 10))
+        
+        # 操作按钮放在底部中间
+        buttons_container = ttk.Frame(bottom_frame)
+        buttons_container.pack()
+        
+        # 使用选中任务按钮
+        ttk.Button(buttons_container, text="📝 使用选中任务", 
+                  command=lambda: self.use_task_from_history(history_window, tree)).pack(side=tk.LEFT, padx=10)
+        
+        # 删除选中按钮
+        ttk.Button(buttons_container, text="🗑️ 删除选中", 
+                  command=lambda: self.delete_selected_tasks(history_window, tree)).pack(side=tk.LEFT, padx=10)
+        
+        # 清空全部按钮
+        ttk.Button(buttons_container, text="🆕 清空全部", 
+                  command=lambda: self.clear_all_tasks(history_window, tree)).pack(side=tk.LEFT, padx=10)
+    
+    def use_task_from_history(self, history_window, tree):
+        """从历史记录中使用任务"""
+        selected_item = tree.selection()
+        if not selected_item:
+            messagebox.showwarning("提示", "请先选择一个任务记录")
+            return
+        
+        item = selected_item[0]
+        values = tree.item(item, 'values')
+        
+        # 根据ID查找对应的完整任务记录
+        task_id = int(values[0])
+        for record in self.task_history:
+            if record.get('id') == task_id:
+                # 将完整的任务内容填充到任务输入框
+                full_task = record.get('task', '')
+                self.task_text.delete("1.0", tk.END)
+                self.task_text.insert("1.0", full_task)
+                self.task.set(full_task)
+                
+                # 关闭历史记录窗口
+                history_window.destroy()
+                
+                self.status_var.set("✅ 已加载历史任务")
+                break
+    
+    def delete_selected_tasks(self, history_window, tree):
+        """删除选中的任务历史记录（支持单条和多条）"""
+        selected_items = tree.selection()
+        if not selected_items:
+            messagebox.showwarning("提示", "请先选择要删除的记录")
+            return
+        
+        count = len(selected_items)
+        if count == 1:
+            message = "确定要删除选中的1条任务记录吗？"
+        else:
+            message = f"确定要删除选中的 {count} 条任务记录吗？"
+        
+        if messagebox.askyesno("确认", message):
+            # 获取要删除的任务ID
+            task_ids_to_delete = []
+            for item in selected_items:
+                values = tree.item(item, 'values')
+                task_ids_to_delete.append(int(values[0]))
+            
+            # 从历史记录中删除
+            self.task_history = [r for r in self.task_history if r.get('id') not in task_ids_to_delete]
+            self.save_task_history()
+            
+            # 刷新树形视图
+            for item in selected_items:
+                tree.delete(item)
+            
+            self.status_var.set(f"✅ 已删除 {count} 条任务记录")
+    
+
+    def clear_all_tasks(self, history_window, tree):
+        """清空所有任务历史记录"""
+        if not self.task_history:
+            messagebox.showinfo("提示", "历史记录已经是空的")
+            return
+        
+        if messagebox.askyesno("确认", f"确定要清空所有 {len(self.task_history)} 条任务历史记录吗？此操作不可恢复！"):
+            self.task_history = []
+            self.save_task_history()
+            
+            # 清空树形视图
+            for item in tree.get_children():
+                tree.delete(item)
+            
+            self.status_var.set("✅ 已清空所有历史记录")
 
 
 def main():
