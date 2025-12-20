@@ -23,11 +23,14 @@ import json
 from datetime import datetime
 import re
 
+# 导入任务精简器
+from task_simplifier import TaskSimplifierManager
+
 
 class PhoneAgentGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("鸡哥手机助手 v1.1 - 更多好玩的工具请关注微信公众号：菜芽创作小助手")
+        self.root.title("鸡哥手机助手 v1.2 - 更多好玩的工具请关注微信公众号：菜芽创作小助手")
         self.root.geometry("1000x750")
         self.root.minsize(900, 650)
         
@@ -63,6 +66,9 @@ class PhoneAgentGUI:
         # 设备类型防重复变量
         self._last_device_type = None
 
+        # 初始化任务精简器
+        self.task_simplifier = TaskSimplifierManager()
+        
         # 快速创建基础界面
         self.create_basic_widgets()
         
@@ -245,8 +251,20 @@ class PhoneAgentGUI:
             
             # Task
             ttk.Label(config_frame, text="📝 Task:", font=('Microsoft YaHei', 9, 'bold')).grid(row=3, column=0, sticky=(tk.NW, tk.W), pady=3)
-            self.task_text = tk.Text(config_frame, width=50, height=2, font=('Microsoft YaHei', 9), wrap=tk.WORD)
-            self.task_text.grid(row=3, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
+            
+            # 任务输入框和按钮的组合框架
+            task_frame = ttk.Frame(config_frame)
+            task_frame.grid(row=3, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
+            task_frame.columnconfigure(0, weight=1)
+            
+            self.task_text = tk.Text(task_frame, width=50, height=2, font=('Microsoft YaHei', 9), wrap=tk.WORD)
+            self.task_text.grid(row=0, column=0, sticky=(tk.W, tk.E))
+            
+            # 任务精简按钮
+            self.simplify_task_button = ttk.Button(task_frame, text="🤖 AI润色", 
+                                                 command=self.show_task_simplifier, 
+                                                 style='Success.TButton')
+            self.simplify_task_button.grid(row=0, column=1, padx=(5, 0))
             
             # 设置初始任务文本
             self.task_text.insert("1.0", self.task.get())
@@ -2534,6 +2552,575 @@ class PhoneAgentGUI:
         """设备选择变化时自动保存配置"""
         self.on_config_change()
     
+    def show_task_simplifier(self):
+        """显示任务精简器窗口"""
+        # 获取当前任务文本
+        current_task = self.task_text.get("1.0", tk.END).strip()
+        
+        if not current_task or current_task == "输入你想要执行的任务，例如：打开美团搜索附近的火锅店":
+            messagebox.showwarning("提示", "请先输入要精简的任务描述")
+            return
+        
+        # 创建精简任务对话框
+        self.show_task_simplifier_dialog(current_task)
+    
+    def show_task_simplifier_dialog(self, current_task):
+        """显示任务精简器对话框"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("🤖 AI润色器")
+        dialog.geometry("850x650")
+        dialog.resizable(True, True)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # 加载上次选择的AI平台
+        last_platform = self._load_last_selected_platform()
+        
+        # 居中显示
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        # 创建主容器，无边距
+        main_container = ttk.Frame(dialog)
+        main_container.pack(fill=tk.BOTH, expand=True)
+        
+        # 绑定ESC键关闭窗口
+        dialog.bind('<Escape>', lambda e: (save_platform_selection(), dialog.destroy()))
+        
+        # 窗口关闭时保存选择
+        dialog.protocol("WM_DELETE_WINDOW", lambda: (save_platform_selection(), dialog.destroy()))
+        
+        # 创建笔记本控件用于分页，无边距
+        notebook = ttk.Notebook(main_container)
+        notebook.pack(fill=tk.BOTH, expand=True)
+        
+        # === 精简任务页面 ===
+        simplify_frame = ttk.Frame(notebook)
+        notebook.add(simplify_frame, text="🚀 任务润色")
+        
+        simplify_container = ttk.Frame(simplify_frame, padding="15")
+        simplify_container.pack(fill=tk.BOTH, expand=True)
+        
+        # 说明文字
+        info_label = ttk.Label(simplify_container, text="使用AI润色任务描述，使其更加清晰和易于理解", 
+                              font=('Microsoft YaHei', 10))
+        info_label.pack(pady=(0, 10))
+        
+        # AI平台选择
+        platform_frame = ttk.Frame(simplify_container)
+        platform_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(platform_frame, text="选择AI平台:", font=('Microsoft YaHei', 9, 'bold')).pack(side=tk.LEFT, padx=(0, 10))
+        
+        # 平台显示名称映射
+        platform_display_map = {
+            "deepseek": "DeepSeek",
+            "doubao": "豆包", 
+            "yuanbao": "元宝",
+            "openai": "OpenAI",
+            "gemini": "Gemini",
+            "claude": "Claude",
+            "glm": "智谱GLM",
+            "wenxin": "文心千帆",
+            "tongyi": "通义千问"
+        }
+        
+        # 反向映射（从显示名称到实际值）
+        display_to_platform = {v: k for k, v in platform_display_map.items()}
+        
+        # 获取显示名称列表
+        display_values = [platform_display_map.get(p, p) for p in ["deepseek", "doubao", "yuanbao", "openai", "gemini", "claude", "glm", "wenxin", "tongyi"]]
+        
+        platform_var_display = tk.StringVar(value=platform_display_map.get(last_platform, last_platform))
+        platform_combo = ttk.Combobox(platform_frame, textvariable=platform_var_display, 
+                                      values=display_values,
+                                      state="readonly", width=15)
+        platform_combo.pack(side=tk.LEFT, padx=(0, 10))
+        
+        def save_platform_selection():
+            """保存用户选择的AI平台"""
+            selected_display = platform_var_display.get()
+            selected_platform = display_to_platform.get(selected_display, selected_display)
+            self._save_last_selected_platform(selected_platform)
+        
+        # 绑定平台选择变化事件
+        platform_combo.bind('<<ComboboxSelected>>', lambda e: save_platform_selection())
+        
+        def jump_to_config():
+            """跳转到对应AI平台的配置页面"""
+            notebook.select(1)  # 切换到API配置页面
+            # 更新配置页面显示为当前选择的平台
+            selected_display = platform_var_display.get()
+            selected_platform = display_to_platform.get(selected_display, selected_display)
+            config_platform_var_display.set(selected_display)
+            update_config_display()
+        
+        config_btn = ttk.Button(platform_frame, text="⚙️ API配置", 
+                               command=jump_to_config)
+        config_btn.pack(side=tk.LEFT)
+        
+        # 任务区域容器
+        tasks_container = ttk.Frame(simplify_container)
+        tasks_container.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        tasks_container.columnconfigure(0, weight=1)
+        tasks_container.columnconfigure(1, weight=1)
+        tasks_container.rowconfigure(0, weight=1)
+        
+        # 原始任务
+        original_frame = ttk.LabelFrame(tasks_container, text="📝 原始任务", padding="10")
+        original_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
+        original_frame.columnconfigure(0, weight=1)
+        original_frame.rowconfigure(0, weight=1)
+        
+        original_text = scrolledtext.ScrolledText(original_frame, height=10, wrap=tk.WORD, 
+                                                font=('Microsoft YaHei', 9))
+        original_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        original_text.insert("1.0", current_task)
+        original_text.config(state=tk.DISABLED)
+        
+        # 润色结果
+        result_frame = ttk.LabelFrame(tasks_container, text="✨ 润色结果", padding="10")
+        result_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
+        result_frame.columnconfigure(0, weight=1)
+        result_frame.rowconfigure(0, weight=1)
+        
+        result_text = scrolledtext.ScrolledText(result_frame, height=10, wrap=tk.WORD, 
+                                               font=('Microsoft YaHei', 9))
+        result_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # 按钮框架
+        button_frame = ttk.Frame(simplify_container)
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        # 状态变量
+        status_var = tk.StringVar(value="准备就绪")
+        status_label = ttk.Label(button_frame, textvariable=status_var)
+        status_label.pack(side=tk.LEFT)
+        
+        def start_simplify():
+            """开始润色任务"""
+            def simplify_worker():
+                try:
+                    # 在主线程中更新状态
+                    selected_display = platform_var_display.get()
+                    platform = display_to_platform.get(selected_display, selected_display)
+                    dialog.after(0, lambda: status_var.set(f"🔍 检查{selected_display}平台配置..."))
+                    
+                    # 检查是否有配置
+                    if not self.task_simplifier.get_provider_status().get(platform, False):
+                        dialog.after(0, lambda: status_var.set("⚠️ 配置未完成"))
+                        dialog.after(0, lambda: messagebox.showwarning(
+                            "配置提示", 
+                            f"🔧 {selected_display}平台未配置\n\n请先在API配置页面设置：\n• API密钥\n• 接口地址\n• 模型名称\n\n配置完成后重试润色"
+                        ))
+                        dialog.after(0, lambda: status_var.set("❌ 配置未完成"))
+                        return
+                    
+                    dialog.after(0, lambda: status_var.set(f"🤖 使用{selected_display}润色任务..."))
+                    
+                    # 使用任务润色器
+                    result = self.task_simplifier.simplify_task(current_task, platform)
+                    
+                    if result.get("success"):
+                        simplified = result.get("simplified_task", current_task)
+                        dialog.after(0, lambda: result_text.delete("1.0", tk.END))
+                        dialog.after(0, lambda: result_text.insert("1.0", simplified))
+                        dialog.after(0, lambda: status_var.set("✅ 润色完成"))
+                    else:
+                        error = result.get("error", "未知错误")
+                        provider = result.get("provider", platform_var.get())
+                        field = result.get("field", "unknown")
+                        
+                        # 使用友好的错误提示
+                        friendly_error = self._parse_simplify_error(error)
+                        
+                        # 如果是特定字段错误，提供更具体的指导
+                        if field != "unknown":
+                            field_guide = self._get_field_specific_guide(field, provider)
+                            full_error = friendly_error + "\n\n" + field_guide
+                        else:
+                            full_error = friendly_error
+                        
+                        dialog.after(0, lambda: messagebox.showerror("润色失败", full_error))
+                        dialog.after(0, lambda: status_var.set("❌ 润色失败"))
+                
+                except Exception as e:
+                    # 解析错误信息并提供友好的中文提示
+                    error_msg = self._parse_simplify_error(str(e))
+                    dialog.after(0, lambda: messagebox.showerror("润色失败", error_msg))
+                    dialog.after(0, lambda: status_var.set("❌ 润色失败"))
+            
+            # 在后台线程中执行润色
+            threading.Thread(target=simplify_worker, daemon=True).start()
+        
+        def apply_result():
+            """应用润色结果到主界面"""
+            simplified = result_text.get("1.0", tk.END).strip()
+            if simplified:
+                self.task_text.delete("1.0", tk.END)
+                self.task_text.insert("1.0", simplified)
+                self.task.set(simplified)
+                self.on_config_change()
+                dialog.destroy()
+            else:
+                messagebox.showwarning("提示", "没有可应用的润色结果")
+        
+        # 按钮
+        ttk.Button(button_frame, text="🚀 开始润色", command=start_simplify).pack(side=tk.RIGHT, padx=(5, 0))
+        ttk.Button(button_frame, text="✅ 应用结果", command=apply_result).pack(side=tk.RIGHT, padx=(5, 0))
+        
+        # === API配置页面 ===
+        config_frame = ttk.Frame(notebook)
+        notebook.add(config_frame, text="⚙️ API配置")
+        
+        config_container = ttk.Frame(config_frame, padding="15")
+        config_container.pack(fill=tk.BOTH, expand=True)
+        
+        # 配置说明
+        config_info = ttk.Label(config_container, 
+                               text="选择要配置的AI平台，设置API密钥、接口地址、模型等参数", 
+                               font=('Microsoft YaHei', 10))
+        config_info.pack(pady=(0, 15))
+        
+        # 平台选择
+        platform_select_frame = ttk.Frame(config_container)
+        platform_select_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        ttk.Label(platform_select_frame, text="选择平台:", 
+                 font=('Microsoft YaHei', 9, 'bold')).pack(side=tk.LEFT, padx=(0, 10))
+        
+        # API配置页面的平台选择也使用中文显示
+        config_platform_var_display = tk.StringVar(value=platform_display_map.get(last_platform, last_platform))
+        config_platform_combo = ttk.Combobox(platform_select_frame, textvariable=config_platform_var_display, 
+                                           values=display_values,
+                                           state="readonly", width=15)
+        config_platform_combo.pack(side=tk.LEFT, padx=(0, 10))
+        def on_config_platform_change():
+            """配置页面平台选择变化时的处理"""
+            update_config_display()
+            # 同步到润色页面的平台选择
+            selected_display = config_platform_var_display.get()
+            platform_var_display.set(selected_display)
+            # 保存选择
+            selected_platform = display_to_platform.get(selected_display, selected_display)
+            self._save_last_selected_platform(selected_platform)
+        
+        config_platform_combo.bind('<<ComboboxSelected>>', lambda e: on_config_platform_change())
+        
+        # 配置详情区域
+        config_details_frame = ttk.LabelFrame(config_container, text="配置详情", padding="15")
+        config_details_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+        config_details_frame.columnconfigure(1, weight=1)
+        
+        # 存储配置输入框
+        config_entries = {}
+        
+        def update_config_display():
+            """更新配置显示"""
+            # 清除现有控件
+            for widget in config_details_frame.winfo_children():
+                widget.destroy()
+            
+            selected_display = config_platform_var_display.get()
+            platform = display_to_platform.get(selected_display, selected_display)
+            config_info = self._get_platform_config_info(platform)
+            
+            # 平台名称和链接
+            header_frame = ttk.Frame(config_details_frame)
+            header_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 15))
+            header_frame.columnconfigure(1, weight=1)
+            
+            name_label = ttk.Label(header_frame, text=config_info['display_name'], 
+                                 font=('Microsoft YaHei', 11, 'bold'))
+            name_label.grid(row=0, column=0, sticky=tk.W)
+            
+            link_btn = ttk.Button(header_frame, text="🔗 获取API密钥", 
+                                command=lambda url=config_info['url']: self._open_url(url))
+            link_btn.grid(row=0, column=1, sticky=tk.E)
+            
+            # 调换顺序：API接口地址放在前面
+            # API接口地址
+            ttk.Label(config_details_frame, text="接口地址:", 
+                     font=('Microsoft YaHei', 9, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=8, padx=(0, 10))
+            
+            url_entry = ttk.Entry(config_details_frame, width=60, font=('Microsoft YaHei', 9))
+            url_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=8)
+            url_entry.insert(0, config_info["default_base_url"])  # 填入默认地址
+            
+            # API密钥
+            ttk.Label(config_details_frame, text="API密钥:", 
+                     font=('Microsoft YaHei', 9, 'bold')).grid(row=2, column=0, sticky=tk.W, pady=8, padx=(0, 10))
+            
+            key_frame = ttk.Frame(config_details_frame)
+            key_frame.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=8)
+            key_frame.columnconfigure(0, weight=1)
+            
+            key_entry = ttk.Entry(key_frame, show="*", width=50, font=('Microsoft YaHei', 9))
+            key_entry.grid(row=0, column=0, sticky=(tk.W, tk.E))
+            
+            show_btn = ttk.Button(key_frame, text="👁️", width=3, 
+                                 command=lambda e=key_entry: self._toggle_visibility(e))
+            show_btn.grid(row=0, column=1, padx=(5, 0))
+            
+            # 模型名称
+            ttk.Label(config_details_frame, text="模型名称:", 
+                     font=('Microsoft YaHei', 9, 'bold')).grid(row=3, column=0, sticky=tk.W, pady=8, padx=(0, 10))
+            
+            model_entry = ttk.Entry(config_details_frame, width=60, font=('Microsoft YaHei', 9))
+            model_entry.grid(row=3, column=1, sticky=(tk.W, tk.E), pady=8)
+            model_entry.insert(0, config_info["default_model"])  # 填入默认模型
+            
+            # 其他参数
+            param_frame = ttk.Frame(config_details_frame)
+            param_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=8)
+            param_frame.columnconfigure(1, weight=1)
+            param_frame.columnconfigure(3, weight=1)
+            param_frame.columnconfigure(5, weight=1)
+            
+            # 超时设置
+            ttk.Label(param_frame, text="超时(秒):", 
+                     font=('Microsoft YaHei', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
+            
+            timeout_entry = ttk.Entry(param_frame, width=15, font=('Microsoft YaHei', 9))
+            timeout_entry.grid(row=0, column=1, sticky=tk.W, padx=(0, 20))
+            timeout_entry.insert(0, str(config_info["default_timeout"]))
+            
+            # 最大Token数
+            ttk.Label(param_frame, text="最大Token:", 
+                     font=('Microsoft YaHei', 9, 'bold')).grid(row=0, column=2, sticky=tk.W, padx=(0, 5))
+            
+            tokens_entry = ttk.Entry(param_frame, width=15, font=('Microsoft YaHei', 9))
+            tokens_entry.grid(row=0, column=3, sticky=tk.W, padx=(0, 20))
+            tokens_entry.insert(0, str(config_info["default_max_tokens"]))
+            
+            # 温度参数
+            ttk.Label(param_frame, text="温度参数:", 
+                     font=('Microsoft YaHei', 9, 'bold')).grid(row=0, column=4, sticky=tk.W, padx=(0, 5))
+            
+            temp_entry = ttk.Entry(param_frame, width=15, font=('Microsoft YaHei', 9))
+            temp_entry.grid(row=0, column=5, sticky=tk.W)
+            temp_entry.insert(0, str(config_info["default_temperature"]))
+            
+            # 保存输入框引用
+            config_entries[platform] = {
+                'api_key': key_entry,
+                'base_url': url_entry,
+                'model': model_entry,
+                'timeout': timeout_entry,
+                'max_tokens': tokens_entry,
+                'temperature': temp_entry
+            }
+            
+            # 加载现有配置
+            self._load_platform_config(platform, config_entries[platform])
+        
+        # 初始化显示
+        update_config_display()
+        
+        # 保存配置按钮
+        save_frame = ttk.Frame(config_container)
+        save_frame.pack(fill=tk.X)
+        
+        def save_config():
+            """保存当前平台的配置"""
+            platform = config_platform_var.get()
+            if platform in config_entries:
+                try:
+                    # 读取所有平台的配置
+                    all_configs = self._load_all_configs()
+                    
+                    # 更新当前平台配置
+                    entries = config_entries[platform]
+                    all_configs[platform] = {
+                        "api_key": entries['api_key'].get(),
+                        "base_url": entries['base_url'].get(),
+                        "model": entries['model'].get(),
+                        "timeout": int(entries['timeout'].get() or 30),
+                        "max_tokens": int(entries['max_tokens'].get() or 200),
+                        "temperature": float(entries['temperature'].get() or 0.1)
+                    }
+                    
+                    # 保存到文件
+                    with open("ai_config.json", 'w', encoding='utf-8') as f:
+                        json.dump(all_configs, f, ensure_ascii=False, indent=2)
+                    
+                    config_info = self._get_platform_config_info(platform)
+                    messagebox.showinfo("成功", f"{config_info['display_name']} 配置已保存")
+                    # 重新加载任务精简器配置
+                    self.task_simplifier.load_config()
+                except Exception as e:
+                    error_msg = self._parse_config_error(str(e))
+                    messagebox.showerror("保存失败", error_msg)
+        
+        ttk.Button(save_frame, text="💾 保存配置", command=save_config).pack(side=tk.RIGHT, padx=(5, 0))
+        ttk.Button(save_frame, text="❌ 关闭", command=dialog.destroy).pack(side=tk.RIGHT)
+        
+
+    
+    def _get_platform_config_info(self, platform):
+        """获取平台配置信息"""
+        platform_configs = {
+            "deepseek": {
+                "display_name": "DeepSeek",
+                "url": "https://platform.deepseek.com/api_keys",
+                "default_base_url": "https://api.deepseek.com",
+                "default_model": "deepseek-chat",
+                "default_timeout": 30,
+                "default_max_tokens": 200,
+                "default_temperature": 0.1
+            },
+            "doubao": {
+                "display_name": "豆包",
+                "url": "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey",
+                "default_base_url": "https://ark.cn-beijing.volces.com/api/v3",
+                "default_model": "ep-20241219143532-qz8wg",
+                "default_timeout": 30,
+                "default_max_tokens": 200,
+                "default_temperature": 0.1
+            },
+            "yuanbao": {
+                "display_name": "腾讯元宝",
+                "url": "https://cloud.tencent.com/product/hunyuan",
+                "default_base_url": "https://api.hunyuan.cloud.tencent.com/v1",
+                "default_model": "hunyuan-turbos-latest",
+                "default_timeout": 30,
+                "default_max_tokens": 200,
+                "default_temperature": 0.1
+            },
+            "openai": {
+                "display_name": "OpenAI",
+                "url": "https://platform.openai.com/api-keys",
+                "default_base_url": "https://api.openai.com/v1",
+                "default_model": "gpt-3.5-turbo",
+                "default_timeout": 30,
+                "default_max_tokens": 200,
+                "default_temperature": 0.1
+            },
+            "gemini": {
+                "display_name": "Google Gemini",
+                "url": "https://aistudio.google.com/app/apikey",
+                "default_base_url": "https://generativelanguage.googleapis.com/v1beta",
+                "default_model": "gemini-1.5-flash",
+                "default_timeout": 30,
+                "default_max_tokens": 200,
+                "default_temperature": 0.1
+            },
+            "claude": {
+                "display_name": "Anthropic Claude",
+                "url": "https://console.anthropic.com/",
+                "default_base_url": "https://api.anthropic.com/v1",
+                "default_model": "claude-3-haiku-20240307",
+                "default_timeout": 30,
+                "default_max_tokens": 200,
+                "default_temperature": 0.1
+            },
+            "glm": {
+                "display_name": "智谱GLM",
+                "url": "https://open.bigmodel.cn/usercenter/apikey",
+                "default_base_url": "https://open.bigmodel.cn/api/paas/v4",
+                "default_model": "glm-4-flash",
+                "default_timeout": 30,
+                "default_max_tokens": 200,
+                "default_temperature": 0.1
+            },
+            "wenxin": {
+                "display_name": "百度文心千帆",
+                "url": "https://console.bce.baidu.com/ai/#/ai/ernie/overview/index",
+                "default_base_url": "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/ernie-lite-8k",
+                "default_model": "ernie-lite-8k",
+                "default_timeout": 30,
+                "default_max_tokens": 200,
+                "default_temperature": 0.1
+            },
+            "tongyi": {
+                "display_name": "阿里通义千问",
+                "url": "https://dashscope.console.aliyun.com/api-key",
+                "default_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "default_model": "qwen-plus",
+                "default_timeout": 30,
+                "default_max_tokens": 200,
+                "default_temperature": 0.1
+            }
+        }
+        return platform_configs.get(platform, platform_configs["deepseek"])
+    
+    def _load_all_configs(self):
+        """加载所有平台配置"""
+        try:
+            if os.path.exists("ai_config.json"):
+                with open("ai_config.json", 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"加载配置失败: {e}")
+        return {}
+    
+    def _load_platform_config(self, platform, entries):
+        """加载指定平台的配置"""
+        try:
+            configs = self._load_all_configs()
+            if platform in configs:
+                config = configs[platform]
+                config_info = self._get_platform_config_info(platform)
+                
+                entries['api_key'].delete(0, tk.END)
+                entries['api_key'].insert(0, config.get("api_key", ""))
+                
+                entries['base_url'].delete(0, tk.END)
+                entries['base_url'].insert(0, config.get("base_url", config_info["default_base_url"]))
+                
+                entries['model'].delete(0, tk.END)
+                entries['model'].insert(0, config.get("model", config_info["default_model"]))
+                
+                entries['timeout'].delete(0, tk.END)
+                entries['timeout'].insert(0, str(config.get("timeout", config_info["default_timeout"])))
+                
+                entries['max_tokens'].delete(0, tk.END)
+                entries['max_tokens'].insert(0, str(config.get("max_tokens", config_info["default_max_tokens"])))
+                
+                entries['temperature'].delete(0, tk.END)
+                entries['temperature'].insert(0, str(config.get("temperature", config_info["default_temperature"])))
+            else:
+                # 加载默认配置
+                config_info = self._get_platform_config_info(platform)
+                entries['base_url'].insert(0, config_info["default_base_url"])
+                entries['model'].insert(0, config_info["default_model"])
+                entries['timeout'].insert(0, str(config_info["default_timeout"]))
+                entries['max_tokens'].insert(0, str(config_info["default_max_tokens"]))
+                entries['temperature'].insert(0, str(config_info["default_temperature"]))
+        except Exception as e:
+            print(f"加载平台配置失败: {e}")
+    
+    def _toggle_visibility(self, entry):
+        """切换输入框显示/隐藏"""
+        if entry.cget('show') == '*':
+            entry.config(show='')
+        else:
+            entry.config(show='*')
+    
+    def _load_api_configs(self, api_entries):
+        """加载现有的API配置（保留兼容性）"""
+        try:
+            if os.path.exists("ai_config.json"):
+                with open("ai_config.json", 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+                
+                for key, entry in api_entries.items():
+                    if key in config_data and config_data[key].get("api_key"):
+                        entry.delete(0, tk.END)
+                        entry.insert(0, config_data[key]["api_key"])
+        except Exception as e:
+            print(f"加载API配置失败: {e}")
+    
+    def _open_url(self, url):
+        """打开URL链接"""
+        try:
+            import webbrowser
+            webbrowser.open(url)
+        except Exception as e:
+            messagebox.showerror("错误", f"无法打开链接: {str(e)}")
+    
     def on_device_type_change(self):
         """设备类型变化时更新相关设置"""
         # 防重复机制：如果设备类型没有实际变化，则跳过扫描
@@ -2634,6 +3221,176 @@ class PhoneAgentGUI:
         except Exception:
             pass  # 静默忽略错误，不影响用户体验
     
+    def _parse_simplify_error(self, error_str):
+        """解析润色任务的错误信息，提供友好的中文提示"""
+        error_lower = error_str.lower()
+        
+        # 参数格式错误（新增）
+        if "格式错误" in error_str or "format" in error_lower:
+            if "api" in error_lower and ("key" in error_lower or "密钥" in error_str):
+                return "🔑 API密钥格式错误\n\n请检查：\n• API密钥格式是否正确（如：sk-xxxxx）\n• 是否复制完整\n• 是否包含多余空格或字符\n\n💡 提示：从API服务商平台重新复制密钥"
+            
+            if "url" in error_lower or "接口地址" in error_str:
+                return "🌐 接口地址格式错误\n\n请检查：\n• 地址必须以http://或https://开头\n• 域名是否正确（如api.deepseek.com）\n• 是否有拼写错误\n\n💡 示例：https://api.deepseek.com"
+            
+            if "模型" in error_str or "model" in error_lower:
+                return "🤖 模型名称格式错误\n\n请检查：\n• 模型名称是否正确\n• 是否拼写完整\n• 是否区分大小写\n\n💡 常用模型：\n• DeepSeek: deepseek-chat\n• OpenAI: gpt-3.5-turbo"
+        
+        # 参数范围错误（新增）
+        if "设置不合理" in error_str or "range" in error_lower:
+            if "超时" in error_str or "timeout" in error_lower:
+                return "⏰ 超时设置不合理\n\n建议设置：\n• 最小值：1秒\n• 最大值：300秒\n• 推荐值：30秒\n\n💡 网络较慢时可适当增加"
+            
+            if "token" in error_lower:
+                return "📊 Token数设置不合理\n\n建议设置：\n• 最小值：1\n• 最大值：8000\n• 推荐值：200-500\n\n💡 任务简单时可设置小一些"
+            
+            if "温度" in error_str or "temperature" in error_lower:
+                return "🌡️ 温度参数不合理\n\n建议设置：\n• 最小值：0（最准确）\n• 最大值：2（最创意）\n• 推荐值：0.1-0.3\n\n💡 任务精简建议使用低温度值"
+        
+        # 网络相关错误
+        if "timeout" in error_lower or "timed out" in error_lower:
+            return "🌐 网络连接超时\n\n请检查：\n• 网络连接是否正常\n• API服务是否可用\n• 请求是否超时（可尝试增加timeout设置）\n\n💡 建议将超时设置为60秒"
+        
+        if "connection" in error_lower and "refused" in error_lower:
+            return "🔌 连接被拒绝\n\n请检查：\n• API地址是否正确\n• 防火墙是否阻止连接\n• API服务是否正常运行\n\n💡 尝试在浏览器中访问API地址"
+        
+        if "dns" in error_lower or "name" in error_lower and "resolve" in error_lower:
+            return "🌍 DNS解析失败\n\n请检查：\n• 网络连接是否正常\n• API地址是否正确\n• DNS服务器是否可用\n\n💡 尝试切换网络或DNS"
+        
+        # API密钥相关错误
+        if "api" in error_lower and ("key" in error_lower or "token" in error_lower or "密钥" in error_str):
+            if "invalid" in error_lower or "unauthorized" in error_lower or "无效" in error_str:
+                return "🔑 API密钥无效\n\n请检查：\n• API密钥是否正确\n• 密钥是否已过期\n• 账户是否有足够权限\n• 是否选择了正确的AI平台\n\n💡 重新从API服务商获取密钥"
+            if "missing" in error_lower or "required" in error_lower or "为空" in error_str:
+                return "🔑 缺少API密钥\n\n请先在配置页面设置正确的API密钥\n\n💡 点击API配置页面 → 选择平台 → 输入密钥"
+            if "长度不足" in error_str or "length" in error_lower:
+                return "🔑 API密钥长度不足\n\n请检查：\n• 是否复制完整\n• 是否被截断\n• 是否包含完整字符\n\n💡 重新复制完整的API密钥"
+        
+        # 配置相关错误
+        if "config" in error_lower and ("not" in error_lower or "missing" in error_lower):
+            return "⚙️ 配置错误\n\n请检查：\n• 是否已完成API配置\n• 配置文件是否存在\n• 配置格式是否正确\n\n💡 在API配置页面重新设置"
+        
+        # 模型相关错误
+        if "model" in error_lower or "模型" in error_str:
+            if "not" in error_lower and ("found" in error_lower or "exist" in error_lower):
+                return "🤖 模型不存在\n\n请检查：\n• 模型名称是否正确\n• 是否选择了支持的模型\n• API服务商是否提供该模型\n\n💡 查看API文档确认可用模型"
+            if "not" in error_lower and ("available" in error_lower or "accessible" in error_lower):
+                return "🤖 模型不可用\n\n请检查：\n• 账户是否有该模型权限\n• 模型是否在当前地区可用\n• API配额是否充足\n\n💡 尝试其他可用模型"
+            if "名称不正确" in error_str:
+                return "🤖 模型名称不正确\n\n请检查模型名称拼写和格式\n\n💡 参考正确格式：\n• DeepSeek: deepseek-chat\n• OpenAI: gpt-3.5-turbo\n• 豆包: ep-xxxxx"
+        
+        # 接口地址相关错误
+        if "base_url" in error_lower or "接口地址" in error_str:
+            if "不正确" in error_str or "incorrect" in error_lower:
+                return "🌐 接口地址不正确\n\n请检查：\n• 地址拼写是否正确\n• 是否包含正确的域名\n• 域名后缀是否正确\n\n💡 对照官方文档核对地址"
+        
+        # 请求相关错误
+        if "request" in error_lower and ("failed" in error_lower or "error" in error_lower):
+            if "400" in error_str or "bad" in error_lower and "request" in error_lower:
+                return "📤 请求参数错误\n\n请检查：\n• 请求格式是否正确\n• 参数是否符合API要求\n• 任务描述是否过长或包含特殊字符\n\n💡 尝试简化任务描述"
+            if "401" in error_str or "unauthorized" in error_lower:
+                return "🔐 认证失败\n\n请检查：\n• API密钥是否正确\n• 认证方式是否符合要求\n\n💡 重新设置API密钥"
+            if "403" in error_str or "forbidden" in error_lower:
+                return "🚫 访问被禁止\n\n请检查：\n• 账户权限是否足够\n• API配额是否充足\n• 是否有访问该功能的权限\n\n💡 检查账户余额和权限"
+            if "429" in error_str or "rate" in error_lower and ("limit" in error_lower or "exceed" in error_lower):
+                return "⏰ 请求频率超限\n\n请稍后再试，或检查：\n• API配额是否充足\n• 请求频率是否过高\n\n💡 等待几分钟后重试"
+            if "500" in error_str or "internal" in error_lower and "error" in error_lower:
+                return "🏢 服务器内部错误\n\n这通常是API服务商的问题，请：\n• 稍后重试\n• 联系API服务商\n• 尝试切换其他AI平台"
+        
+        # 任务相关错误
+        if "task" in error_lower:
+            return "📝 任务处理错误\n\n请检查：\n• 任务描述是否清晰合理\n• 任务长度是否适中\n• 是否包含敏感或违规内容\n\n💡 尝试简化或改写任务描述"
+        
+        # 通用错误处理
+        if "file" in error_lower and ("not" in error_lower or "missing" in error_lower):
+            return "📁 文件错误\n\n请检查：\n• 配置文件是否存在\n• 文件权限是否正确\n• 文件路径是否有效\n\n💡 重新启动程序"
+        
+        if "json" in error_lower and ("decode" in error_lower or "parse" in error_lower):
+            return "📋 数据解析错误\n\n请检查：\n• API返回数据格式是否正确\n• 配置文件格式是否有效\n\n💡 重新设置配置"
+        
+        # 默认错误信息（包含原始错误但更友好）
+        return f"❌ 未知错误\n\n原始错误信息：{error_str}\n\n建议：\n• 检查网络连接\n• 验证API配置\n• 重启程序后重试\n• 如问题持续，请联系技术支持\n\n💡 常见问题：\n• API密钥格式错误\n• 接口地址拼写错误\n• 模型名称不正确\n• 参数范围设置不合理"
+    
+    def _get_field_specific_guide(self, field: str, provider: str) -> str:
+        """根据错误字段提供具体的修复指导"""
+        
+        guides = {
+            "api_key": {
+                "deepseek": "🔑 DeepSeek API密钥设置指导：\n\n1. 访问 https://platform.deepseek.com/api_keys\n2. 创建或复制API密钥\n3. 确保密钥格式为：sk-xxxxxxxxxx\n4. 检查密钥是否完整复制\n5. 验证密钥是否已激活",
+                
+                "openai": "🔑 OpenAI API密钥设置指导：\n\n1. 访问 https://platform.openai.com/api-keys\n2. 创建新的API密钥\n3. 确保密钥格式为：sk-xxxxxxxxxx\n4. 检查账户余额是否充足\n5. 验证API权限设置",
+                
+                "doubao": "🔑 豆包API密钥设置指导：\n\n1. 访问 https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey\n2. 创建或复制API密钥\n3. 确保密钥长度充足\n4. 检查账户状态和配额\n5. 验证项目权限设置",
+                
+                "wenxin": "🔑 文心千帆API密钥设置指导：\n\n1. 访问 https://console.bce.baidu.com/ai/#/ai/ernie/overview/index\n2. 创建应用获取API Key和Secret Key\n3. 使用API Key和Secret Key获取access_token\n4. 检查账户状态和配额\n5. 验证应用权限设置",
+                
+                "tongyi": "🔑 通义千问API密钥设置指导：\n\n1. 访问 https://dashscope.console.aliyun.com/api-key\n2. 创建新的API密钥\n3. 确保密钥格式为sk-xxxxxxxxxx\n4. 检查账户余额和配额\n5. 验证服务权限和开通状态",
+                
+                "default": "🔑 API密钥设置指导：\n\n1. 登录对应AI服务商平台\n2. 进入API密钥管理页面\n3. 创建或获取新的API密钥\n4. 确保密钥格式正确\n5. 检查密钥权限和状态"
+            },
+            
+            "base_url": {
+                "deepseek": "🌐 DeepSeek接口地址设置：\n\n正确格式：https://api.deepseek.com\n\n常见错误：\n• 缺少https://前缀\n• 拼写错误（如deekseek）\n• 多余的路径或参数",
+                
+                "openai": "🌐 OpenAI接口地址设置：\n\n正确格式：https://api.openai.com/v1\n\n常见错误：\n• 缺少https://前缀\n• 拼写错误\n• 缺少/v1路径",
+                
+                "doubao": "🌐 豆包接口地址设置：\n\n正确格式：https://ark.cn-beijing.volces.com/api/v3\n\n常见错误：\n• 地区设置错误\n• API版本不正确\n• 域名拼写错误",
+                
+                "wenxin": "🌐 文心千帆接口地址设置：\n\n正确格式：https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/ernie-lite-8k\n\n常见错误：\n• 模型名称错误\n• 缺少access_token\n• 接口版本不正确",
+                
+                "tongyi": "🌐 通义千问接口地址设置：\n\n正确格式：https://dashscope.aliyuncs.com/compatible-mode/v1\n\n常见错误：\n• 使用了非兼容模式地址\n• 地区设置错误\n• API版本不正确",
+                
+                "default": "🌐 接口地址设置指导：\n\n1. 确保以http://或https://开头\n2. 检查域名拼写是否正确\n3. 验证路径和版本\n4. 参考官方文档确认"
+            },
+            
+            "model": {
+                "deepseek": "🤖 DeepSeek模型名称：\n\n常用模型：\n• deepseek-chat（对话模型）\n• deepseek-coder（代码模型）\n\n注意事项：\n• 模型名称区分大小写\n• 确保账户有该模型权限",
+                
+                "openai": "🤖 OpenAI模型名称：\n\n常用模型：\n• gpt-3.5-turbo（推荐）\n• gpt-4\n• gpt-4-turbo\n• gpt-4o\n\n注意事项：\n• 确保模型可用性\n• 检查账户权限",
+                
+                "doubao": "🤖 豆包模型名称：\n\n常用格式：\n• ep-xxxxxxxxxx（端点ID）\n• doubao-pro-4k\n• doubao-pro-32k\n\n注意事项：\n• 需要先创建推理端点\n• 确保端点状态正常",
+                
+                "wenxin": "🤖 文心千帆模型名称：\n\n常用模型：\n• ernie-lite-8k（轻量级）\n• ernie-tiny-8k（超轻量）\n• ernie-speed-8k（速度版）\n• ernie-4.0-8k（最新版）\n\n注意事项：\n• 不同模型性能和价格不同\n• 确保账户有该模型权限",
+                
+                "tongyi": "🤖 通义千问模型名称：\n\n常用模型：\n• qwen-plus（推荐）\n• qwen-turbo（快速版）\n• qwen-max（最强版）\n• qwen-long（长文本）\n\n注意事项：\n• 模型名称区分大小写\n• 确保账户有该模型权限",
+                
+                "default": "🤖 模型名称设置：\n\n1. 查看API文档确认可用模型\n2. 检查模型名称拼写\n3. 验证大小写格式\n4. 确保账户有使用权限"
+            },
+            
+            "timeout": "⏰ 超时设置指导：\n\n建议范围：1-300秒\n• 网络良好：30秒\n• 网络较慢：60秒\n• 复杂任务：90-120秒\n\n注意：超时时间过长可能影响体验",
+            
+            "max_tokens": "📊 最大Token数设置：\n\n建议范围：1-8000\n• 简单任务：200-500\n• 复杂任务：500-2000\n• 长文本处理：2000-4000\n\n注意：Token数影响输出长度",
+            
+            "temperature": "🌡️ 温度参数设置：\n\n建议范围：0.0-2.0\n• 精准任务：0.1-0.3\n• 平衡任务：0.5-0.7\n• 创意任务：1.0-1.5\n\n注意：任务精简建议使用低温度值",
+            
+            "default": "⚙️ 参数设置指导：\n\n1. 参考官方文档\n2. 使用推荐值\n3. 根据实际需求调整\n4. 验证参数有效性"
+        }
+        
+        # 获取平台特定的指导
+        if field in guides:
+            platform_guide = guides[field].get(provider, guides[field].get("default", ""))
+            return platform_guide
+        else:
+            return guides.get("default", "")
+    
+    def _parse_config_error(self, error_str):
+        """解析配置保存的错误信息，提供友好的中文提示"""
+        error_lower = error_str.lower()
+        
+        if "permission" in error_lower and "denied" in error_lower:
+            return "🔒 权限不足\n\n请检查：\n• 程序是否有写入权限\n• 是否被安全软件阻止\n• 尝试以管理员身份运行"
+        
+        if "disk" in error_lower and ("full" in error_lower or "space" in error_lower):
+            return "💾 磁盘空间不足\n\n请清理磁盘空间后重试"
+        
+        if "file" in error_lower and ("not" in error_lower or "missing" in error_lower):
+            return "📁 文件路径错误\n\n请检查：\n• 程序目录是否存在\n• 文件路径是否有效"
+        
+        if "json" in error_lower and ("encode" in error_lower or "decode" in error_lower):
+            return "📋 配置格式错误\n\n配置数据格式异常，请重置配置"
+        
+        return f"❌ 配置保存失败\n\n原始错误：{error_str}\n\n建议：\n• 检查磁盘空间\n• 验证写入权限\n• 重启程序后重试"
+
     def on_closing(self):
         """程序关闭时的处理，自动保存配置"""
         try:
@@ -2677,6 +3434,34 @@ class PhoneAgentGUI:
         
         # 销毁窗口，退出程序
         self.root.destroy()
+    
+    def _load_last_selected_platform(self):
+        """加载上次选择的AI平台"""
+        try:
+            config_path = os.path.join(os.path.dirname(__file__), 'gui_config.json')
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    return config.get('last_selected_ai_platform', 'deepseek')
+        except Exception as e:
+            print(f"加载上次选择的AI平台失败: {e}")
+        return 'deepseek'
+    
+    def _save_last_selected_platform(self, platform):
+        """保存用户选择的AI平台"""
+        try:
+            config_path = os.path.join(os.path.dirname(__file__), 'gui_config.json')
+            config = {}
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+            
+            config['last_selected_ai_platform'] = platform
+            
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"保存上次选择的AI平台失败: {e}")
 
 
 def main():

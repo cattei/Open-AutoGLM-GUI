@@ -1,0 +1,74 @@
+{
+  "doubao": {
+    "api_key": "",
+    "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+    "model": "ep-20241219143532-qz8wg",
+    "timeout": 30,
+    "max_tokens": 200,
+    "temperature": 0.1
+  },
+  "yuanbao": {
+    "api_key": "",
+    "base_url": "https://api.hunyuan.cloud.tencent.com/v1",
+    "model": "hunyuan-lite",
+    "timeout": 30,
+    "max_tokens": 200,
+    "temperature": 0.1
+  },
+  "deepseek": {
+    "api_key": "",
+    "base_url": "https://api.deepseek.com",
+    "model": "deepseek-chat",
+    "timeout": 30,
+    "max_tokens": 200,
+    "temperature": 0.1
+  },
+  "openai": {
+    "api_key": "",
+    "base_url": "https://api.openai.com/v1",
+    "model": "gpt-3.5-turbo",
+    "timeout": 30,
+    "max_tokens": 200,
+    "temperature": 0.1
+  },
+  "gemini": {
+    "api_key": "",
+    "base_url": "https://generativelanguage.googleapis.com/v1beta",
+    "model": "gemini-1.5-flash",
+    "timeout": 30,
+    "max_tokens": 200,
+    "temperature": 0.1
+  },
+  "claude": {
+    "api_key": "",
+    "base_url": "https://api.anthropic.com/v1",
+    "model": "claude-3-haiku-20240307",
+    "timeout": 30,
+    "max_tokens": 200,
+    "temperature": 0.1
+  },
+  "glm": {
+    "api_key": "",
+    "base_url": "https://open.bigmodel.cn/api/paas/v4",
+    "model": "glm-4-flash",
+    "timeout": 30,
+    "max_tokens": 200,
+    "temperature": 0.1
+  },
+  "wenxin": {
+    "api_key": "",
+    "base_url": "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/ernie-lite-8k",
+    "model": "ernie-lite-8k",
+    "timeout": 30,
+    "max_tokens": 200,
+    "temperature": 0.1
+  },
+  "tongyi": {
+    "api_key": "",
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "model": "qwen-plus",
+    "timeout": 30,
+    "max_tokens": 200,
+    "temperature": 0.1
+  }
+}
