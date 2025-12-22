@@ -123,7 +123,7 @@ from task_simplifier import TaskSimplifierManager
 class PhoneAgentGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("鸡哥手机助手 v1.5.1 - 更多好玩的工具请关注微信公众号：菜芽创作小助手")
+        self.root.title("鸡哥手机助手 v1.6 - 更多好玩的工具请关注微信公众号：菜芽创作小助手")
         self.root.geometry("1200x750")
         self.root.minsize(1100, 650)
         
@@ -151,6 +151,8 @@ class PhoneAgentGUI:
         self.selected_device_id = tk.StringVar(value="")
         # 支持环境变量 PHONE_AGENT_DEVICE_ID
         self.env_device_id = os.getenv("PHONE_AGENT_DEVICE_ID", "")
+        # iOS设备IP地址
+        self.ios_device_ip = tk.StringVar(value="localhost")
         
         # 窗口控制变量
         self.qrcode_window = None
@@ -276,8 +278,15 @@ class PhoneAgentGUI:
             # 将保存的英文值转换为中文显示
             if device_type_value == 'adb':
                 self.device_type.set('安卓')
+            elif device_type_value == 'ios':
+                self.device_type.set('iOS')
             else:
                 self.device_type.set('鸿蒙')
+            
+            # 加载iOS设备IP配置
+            ios_ip = config.get('ios_device_ip', 'localhost')
+            if hasattr(self, 'ios_device_ip'):
+                self.ios_device_ip.set(ios_ip)
             
             # 如果界面已创建，更新任务文本框
             if hasattr(self, 'task_text'):
@@ -523,7 +532,7 @@ class PhoneAgentGUI:
             device_type_combo_frame.columnconfigure(0, weight=0)
             
             self.device_type_combo = ttk.Combobox(device_type_combo_frame, textvariable=self.device_type, width=15, font=('Microsoft YaHei', 9), state="readonly")
-            self.device_type_combo['values'] = ('安卓', '鸿蒙')
+            self.device_type_combo['values'] = ('安卓', '鸿蒙', 'iOS')
             self.device_type_combo.grid(row=0, column=0, sticky=tk.W)
             self.device_type_combo.bind('<<ComboboxSelected>>', lambda e: self.on_device_type_change())
             ttk.Label(device_type_combo_frame, text="（选择设备系统类型）", font=('Microsoft YaHei', 8), foreground='gray').grid(row=0, column=1, padx=(3, 0))
@@ -750,24 +759,30 @@ class PhoneAgentGUI:
         else:
             self._append_output("⚠️ 未指定设备ID，将使用默认设备\n")
 
-        # 无论在开发环境还是打包环境中，都使用直接运行方式
-        # 在正式运行前自动检测并尝试唤醒/解锁屏幕（不展示按钮）
-        try:
-            import os
-            tool_name = 'adb' if self.device_type.get() == '安卓' else 'hdc'
-            self._append_output(f"🔌 正在检测并唤醒设备（使用: {tool_name}）...\n")
-            self.status_var.set("🔌 检查并唤醒设备...")
-            # 使用默认滑动解锁坐标，可根据设备分辨率调整
-            pwd = os.getenv('PHONE_AGENT_LOCK_PASSWORD', '')
-            ok = ensure_awake_and_unlocked(adb=tool_name, swipe=(300, 1000, 300, 300), password=pwd if pwd else None)
-            if ok:
-                self._append_output("✅ 设备已唤醒或已解锁\n")
-            else:
-                self._append_output("⚠️ 无法唤醒设备，继续尝试运行（请手动检查设备）\n")
-        except Exception as e:
-            self._append_output(f"唤醒检测出错: {str(e)}\n")
+            # 对于iOS设备，直接运行，不需要唤醒检测
+        if self.device_type.get() == 'iOS':
+            self._append_output(f"🍎 准备运行iOS设备任务...\n")
+            self.status_var.set("🍎 准备运行iOS任务...")
+            self._run_ios_agent(base_url, model, apikey, task)
+        else:
+            # 无论在开发环境还是打包环境中，都使用直接运行方式
+            # 在正式运行前自动检测并尝试唤醒/解锁屏幕（不展示按钮）
+            try:
+                import os
+                tool_name = 'adb' if self.device_type.get() == '安卓' else 'hdc'
+                self._append_output(f"🔌 正在检测并唤醒设备（使用: {tool_name}）...\n")
+                self.status_var.set("🔌 检查并唤醒设备...")
+                # 使用默认滑动解锁坐标，可根据设备分辨率调整
+                pwd = os.getenv('PHONE_AGENT_LOCK_PASSWORD', '')
+                ok = ensure_awake_and_unlocked(adb=tool_name, swipe=(300, 1000, 300, 300), password=pwd if pwd else None)
+                if ok:
+                    self._append_output("✅ 设备已唤醒或已解锁\n")
+                else:
+                    self._append_output("⚠️ 无法唤醒设备，继续尝试运行（请手动检查设备）\n")
+            except Exception as e:
+                self._append_output(f"唤醒检测出错: {str(e)}\n")
 
-        self._run_agent_direct(base_url, model, apikey, task, selected_device)
+            self._run_agent_direct(base_url, model, apikey, task, selected_device)
         
     def _run_adb_silent(self, cmd, timeout=10):
         """静默执行ADB命令，避免弹窗"""
@@ -775,6 +790,89 @@ class PhoneAgentGUI:
         creation_flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
                           creationflags=creation_flags)
+
+    def _run_ios_agent(self, base_url, model, apikey, task):
+        """运行iOS设备代理"""
+        import subprocess
+        import sys
+        import os
+        
+        try:
+            # 获取iOS设备IP地址
+            ios_ip = self.ios_device_ip.get()
+            if not ios_ip:
+                messagebox.showerror("错误", "请先设置iOS设备IP地址")
+                return
+            
+            # 构建iOS命令
+            ios_script_path = os.path.join(os.path.dirname(__file__), "ios.py")
+            if not os.path.exists(ios_script_path):
+                self._append_output("❌ 未找到ios.py脚本文件\n")
+                messagebox.showerror("错误", "未找到ios.py脚本文件")
+                return
+            
+            # 构建命令，将localhost替换为设置的IP地址
+            cmd = [
+                sys.executable, ios_script_path,
+                "--base-url", base_url,
+                "--model", model,
+                "--api-key", apikey,
+                "--wda-url", f"http://{ios_ip}:8100",
+                task
+            ]
+            
+            self._append_output(f"🍎 执行iOS命令: {' '.join(cmd)}\n")
+            
+            # 启动进程
+            self.process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                universal_newlines=True,
+                cwd=os.path.dirname(__file__)
+            )
+            
+            # 监控输出
+            def monitor_output():
+                try:
+                    for line in iter(self.process.stdout.readline, ''):
+                        if line:
+                            self.root.after(0, lambda text=line: self._append_output(text))
+                        if not self.running:
+                            break
+                except Exception as e:
+                    self.root.after(0, lambda: self._append_output(f"输出监控错误: {str(e)}\n"))
+                finally:
+                    if self.process:
+                        self.process.stdout.close()
+                        return_code = self.process.wait()
+                        self.root.after(0, lambda: self._on_process_finished(return_code))
+            
+            # 启动监控线程
+            threading.Thread(target=monitor_output, daemon=True).start()
+            
+        except Exception as e:
+            self._append_output(f"❌ 启动iOS代理失败: {str(e)}\n")
+            messagebox.showerror("错误", f"启动iOS代理失败: {str(e)}")
+            self.running = False
+            self.run_button.config(state=tk.NORMAL)
+            self.stop_button.config(state=tk.DISABLED)
+            self.status_var.set("✅ 就绪")
+
+    def _on_process_finished(self, return_code):
+        """处理进程结束"""
+        self.running = False
+        self.run_button.config(state=tk.NORMAL)
+        self.stop_button.config(state=tk.DISABLED)
+        
+        if return_code == 0:
+            self.status_var.set("✅ 任务执行完成")
+            self._append_output("\n✅ 任务执行完成\n")
+        else:
+            self.status_var.set("⚠️ 任务执行结束")
+            self._append_output(f"\n⚠️ 任务执行结束，返回码: {return_code}\n")
 
     def _run_agent_direct(self, base_url, model, apikey, task, selected_device):
         """直接运行代理（打包环境）"""
@@ -795,8 +893,15 @@ class PhoneAgentGUI:
             
             # 获取当前设备类型
             device_type_value = self.device_type.get()
-            device_type = DeviceType.ADB if device_type_value == "安卓" else DeviceType.HDC
-            device_type_str = "adb" if device_type_value == "安卓" else "hdc"
+            if device_type_value == "安卓":
+                device_type = DeviceType.ADB
+                device_type_str = "adb"
+            elif device_type_value == "iOS":
+                device_type = None  # iOS使用不同的逻辑
+                device_type_str = "ios"
+            else:
+                device_type = DeviceType.HDC
+                device_type_str = "hdc"
             set_device_type(device_type)
             safe_output(f"🔗 设备类型: {device_type_str.upper()}\n")
             
@@ -1086,7 +1191,11 @@ class PhoneAgentGUI:
                 'task': self.task_text.get("1.0", tk.END).strip(),
                 'max_steps': int(self.max_steps.get() or 200),
                 'temperature': float(self.temperature.get() or 0.0),
-                'device_type': "adb" if self.device_type.get() == "安卓" else "hdc",
+                'device_type': (lambda: {
+                    "安卓": "adb", 
+                    "iOS": "ios", 
+                    "鸿蒙": "hdc"
+                }.get(self.device_type.get(), "adb"))(),
                 'selected_device': self.selected_device_id.get(),  # 保存用户选择的设备ID（不是环境变量）
                 'remote_connection': getattr(self, 'last_remote_connection', {
                     'ip': '192.168.1.100',
@@ -1099,7 +1208,8 @@ class PhoneAgentGUI:
                 'legacy_wireless': getattr(self, 'last_legacy_wireless', {
                     'ip': '192.168.1.100',
                     'port': '5555'
-                })
+                }),
+                'ios_device_ip': getattr(self, 'ios_device_ip', None).get() if hasattr(self, 'ios_device_ip') else "localhost"
             }
             
             with open(self.config_file, 'w', encoding='utf-8') as f:
@@ -1123,6 +1233,15 @@ class PhoneAgentGUI:
             except ValueError:
                 return  # 温度值不是有效数字，跳过保存
                 
+            # 转换设备类型
+            device_type_str = self.device_type.get()
+            if device_type_str == "安卓":
+                device_type_value = "adb"
+            elif device_type_str == "iOS":
+                device_type_value = "ios"
+            else:
+                device_type_value = "hdc"
+                
             config = {
                 'base_url': self.base_url.get(),
                 'model': self.model.get(),
@@ -1130,7 +1249,7 @@ class PhoneAgentGUI:
                 'task': self.task_text.get("1.0", tk.END).strip(),
                 'max_steps': int(self.max_steps.get() or 200),
                 'temperature': temp_value,
-                'device_type': "adb" if self.device_type.get() == "安卓" else "hdc",
+                'device_type': device_type_value,
                 'selected_device': self.selected_device_id.get(),  # 保存用户选择的设备ID（不是环境变量）
                 'remote_connection': getattr(self, 'last_remote_connection', {
                     'ip': '192.168.1.100',
@@ -1143,7 +1262,8 @@ class PhoneAgentGUI:
                 'legacy_wireless': getattr(self, 'last_legacy_wireless', {
                     'ip': '192.168.1.100',
                     'port': '5555'
-                })
+                }),
+                'ios_device_ip': getattr(self, 'ios_device_ip', None).get() if hasattr(self, 'ios_device_ip') else "localhost"
             }
             
             with open(self.config_file, 'w', encoding='utf-8') as f:
@@ -3769,6 +3889,79 @@ class PhoneAgentGUI:
         except Exception as e:
             messagebox.showerror("错误", f"无法打开链接: {str(e)}")
     
+    def set_ios_device_ip(self):
+        """设置iOS设备IP地址"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("🍎 iOS设备IP设置")
+        dialog.geometry("520x360")  # 继续增加窗口高度
+        dialog.resizable(True, True)  # 允许调整大小
+        dialog.transient(self.root)  # 设置为父窗口的子窗口
+        dialog.grab_set()  # 模态对话框
+        
+        # 居中显示在主窗口中间
+        self.center_window(dialog)
+        
+        # 主框架
+        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # 标题
+        title_label = ttk.Label(main_frame, text="🍎 设置iOS设备IP地址", 
+                               font=('Microsoft YaHei', 11, 'bold'))
+        title_label.pack(pady=(0, 15))
+        
+        # IP地址输入框架
+        config_frame = ttk.LabelFrame(main_frame, text="🌐 设备配置", padding="10")
+        config_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        # IP地址输入
+        ttk.Label(config_frame, text="设备IP地址:", font=('Microsoft YaHei', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, pady=5)
+        ip_var = tk.StringVar(value=self.ios_device_ip.get())
+        ip_entry = ttk.Entry(config_frame, textvariable=ip_var, width=20, font=('Microsoft YaHei', 10))
+        ip_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=5)
+        config_frame.columnconfigure(1, weight=1)
+        
+        # 说明文字
+        info_frame = ttk.LabelFrame(main_frame, text="📋 连接说明", padding="10")
+        info_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+        
+        info_text = "• 默认地址: localhost (USB连接)\n• 本地连接: 127.0.0.1 (本地测试)\n• 无线连接: 192.168.x.x (WiFi连接)\n• 确保WebDriverAgent运行在8100端口"
+        info_label = ttk.Label(info_frame, text=info_text, font=('Microsoft YaHei', 9), foreground='gray', justify=tk.LEFT)
+        info_label.pack(anchor=tk.W, fill=tk.BOTH, expand=True)
+        
+        # 按钮框架 - 使用更好的布局
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(pady=(10, 0))  # 添加上边距
+        
+        def save_ip():
+            ip_address = ip_var.get().strip()
+            if ip_address:
+                self.ios_device_ip.set(ip_address)
+                self._append_output(f"🍎 iOS设备IP已设置为: {ip_address}\n")
+                
+                # 更新设备状态显示
+                if hasattr(self, 'device_status_label'):
+                    self.device_status_label.config(text=f"iOS设备IP: {ip_address}")
+                
+                # 自动保存配置
+                self.on_config_change()
+                
+                dialog.destroy()
+                messagebox.showinfo("成功", f"✅ iOS设备IP已设置为: {ip_address}")
+            else:
+                messagebox.showwarning("输入错误", "请输入有效的IP地址")
+        
+        # 按钮 - 确保正确显示
+        save_button = ttk.Button(button_frame, text="💾 保存", command=save_ip)
+        save_button.pack(side=tk.LEFT, padx=8, ipadx=10, ipady=5)  # 增加内边距
+        
+        cancel_button = ttk.Button(button_frame, text="❌ 取消", command=dialog.destroy)
+        cancel_button.pack(side=tk.LEFT, padx=8, ipadx=10, ipady=5)  # 增加内边距
+        
+        # 设置焦点到IP地址输入框
+        ip_entry.focus()
+        ip_entry.select_range(0, tk.END)
+
     def on_device_type_change(self):
         """设备类型变化时更新相关设置"""
         # 防重复机制：如果设备类型没有实际变化，则跳过扫描
@@ -3781,7 +3974,14 @@ class PhoneAgentGUI:
         self._last_device_type = current_device_type
         
         # 将中文选项转换为英文值用于内部处理
-        device_type_en = "adb" if current_device_type == "安卓" else "hdc"
+        if current_device_type == "安卓":
+            device_type_en = "adb"
+        elif current_device_type == "鸿蒙":
+            device_type_en = "hdc"
+        elif current_device_type == "iOS":
+            device_type_en = "ios"
+        else:
+            device_type_en = "adb"  # 默认
         
         # 清空设备列表
         self.connected_devices = []
@@ -3807,11 +4007,20 @@ class PhoneAgentGUI:
                             widget.config(text="🔗 连接HDC")
                         elif ("安装ADB键盘" in text or "远程桌面" in text) and is_visible:
                             widget.pack_forget()
+                    elif device_type_en == "ios":
+                        self.adb_frame.config(text="🍎 iOS设备管理")
+                        # iOS模式：修改连接按钮为设置IP，隐藏ADB相关按钮
+                        if "连接ADB" in text or "连接HDC" in text:
+                            widget.config(text="🌐 设置设备IP", command=self.set_ios_device_ip)
+                        elif ("安装ADB键盘" in text or "远程桌面" in text) and is_visible:
+                            widget.pack_forget()
                     else:
                         self.adb_frame.config(text="📱 ADB设备管理")
                         # ADB模式：修改连接按钮，显示ADB键盘按钮和远程桌面按钮
                         if "连接HDC" in text:
-                            widget.config(text="🔗 连接ADB")
+                            widget.config(text="🔗 连接ADB", command=self.connect_adb_device)
+                        elif "设置设备IP" in text:
+                            widget.config(text="🔗 连接ADB", command=self.connect_adb_device)
                         elif "安装ADB键盘" in text and not is_visible:
                             widget.pack(side=tk.LEFT, padx=(0, 8))
                         elif "远程桌面" in text and not is_visible:
@@ -3827,11 +4036,32 @@ class PhoneAgentGUI:
         
         # 更新设备扫描命令和标签
         if hasattr(self, 'device_status_label'):
-            device_type_text = "HDC设备" if device_type_en == "hdc" else "ADB设备"
-            self.device_status_label.config(text=f"未连接{device_type_text}")
+            if device_type_en == "hdc":
+                device_type_text = "HDC设备"
+            elif device_type_en == "ios":
+                device_type_text = "iOS设备"
+                # 如果已经设置了IP，显示当前IP
+                current_ip = self.ios_device_ip.get()
+                if current_ip and current_ip != "localhost":
+                    self.device_status_label.config(text=f"iOS设备IP: {current_ip}")
+                else:
+                    self.device_status_label.config(text="iOS设备未配置IP")
+            else:
+                device_type_text = "ADB设备"
+                self.device_status_label.config(text=f"未连接{device_type_text}")
         
-        # 刷新设备列表
-        self.refresh_devices()
+        # 只对非iOS设备进行设备扫描
+        if device_type_en != "ios":
+            self.refresh_devices()
+        
+        # 控制自动唤醒按钮的显示/隐藏（仅在安卓设备时显示）
+        if hasattr(self, 'pwd_button'):
+            if device_type_en == "adb":
+                # 安卓设备：显示自动唤醒按钮
+                self.pwd_button.grid()
+            else:
+                # 鸿蒙和iOS设备：隐藏自动唤醒按钮
+                self.pwd_button.grid_remove()
         
         # 自动保存配置
         self.on_config_change()
@@ -3848,7 +4078,11 @@ class PhoneAgentGUI:
                 'task': self.task_text.get("1.0", tk.END).strip(),
                 'max_steps': int(self.max_steps.get() or 200),
                 'temperature': float(self.temperature.get() or 0.0),
-                'device_type': "adb" if self.device_type.get() == "安卓" else "hdc",
+                'device_type': (lambda: {
+                    "安卓": "adb", 
+                    "iOS": "ios", 
+                    "鸿蒙": "hdc"
+                }.get(self.device_type.get(), "adb"))(),
                 'selected_device': self.selected_device_id.get(),  # 保存用户选择的设备ID（不是环境变量）
                 'remote_connection': getattr(self, 'last_remote_connection', {
                     'ip': '192.168.1.100',
@@ -3861,7 +4095,8 @@ class PhoneAgentGUI:
                 'legacy_wireless': getattr(self, 'last_legacy_wireless', {
                     'ip': '192.168.1.100',
                     'port': '5555'
-                })
+                }),
+                'ios_device_ip': getattr(self, 'ios_device_ip', None).get() if hasattr(self, 'ios_device_ip') else "localhost"
             }
             
             with open(self.config_file, 'w', encoding='utf-8') as f:
@@ -4057,7 +4292,11 @@ class PhoneAgentGUI:
                 'task': self.task_text.get("1.0", tk.END).strip(),
                 'max_steps': int(self.max_steps.get() or 200),
                 'temperature': float(self.temperature.get() or 0.0),
-                'device_type': "adb" if self.device_type.get() == "安卓" else "hdc",
+                'device_type': (lambda: {
+                    "安卓": "adb", 
+                    "iOS": "ios", 
+                    "鸿蒙": "hdc"
+                }.get(self.device_type.get(), "adb"))(),
                 'selected_device': self.selected_device_id.get(),  # 保存用户选择的设备ID（不是环境变量）
                 'remote_connection': getattr(self, 'last_remote_connection', {
                     'ip': '192.168.1.100',
@@ -4070,7 +4309,8 @@ class PhoneAgentGUI:
                 'legacy_wireless': getattr(self, 'last_legacy_wireless', {
                     'ip': '192.168.1.100',
                     'port': '5555'
-                })
+                }),
+                'ios_device_ip': getattr(self, 'ios_device_ip', None).get() if hasattr(self, 'ios_device_ip') else "localhost"
             }
             
             with open(self.config_file, 'w', encoding='utf-8') as f:
