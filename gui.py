@@ -123,7 +123,7 @@ from task_simplifier import TaskSimplifierManager
 class PhoneAgentGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("鸡哥手机助手 v1.5 - 更多好玩的工具请关注微信公众号：菜芽创作小助手")
+        self.root.title("鸡哥手机助手 v1.5.1 - 更多好玩的工具请关注微信公众号：菜芽创作小助手")
         self.root.geometry("1200x750")
         self.root.minsize(1100, 650)
         
@@ -4355,8 +4355,8 @@ class PhoneAgentGUI:
             
             # 添加其他有用选项
             scrcpy_cmd.extend([
-                '--stay-awake',      # 保持设备唤醒
-                '--turn-screen-off',  # 关闭设备屏幕以节省电量
+                '--no-audio',        # 禁用音频转发
+                '--stay-awake',      # 保持设备唤醒                
                 '--window-title', f'{device_display}远程控制 - {device_id}'  # 设置窗口标题
             ])
             
