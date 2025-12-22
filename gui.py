@@ -123,7 +123,7 @@ from task_simplifier import TaskSimplifierManager
 class PhoneAgentGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("鸡哥手机助手 v1.6 - 更多好玩的工具请关注微信公众号：菜芽创作小助手")
+        self.root.title("鸡哥手机助手 v1.6.1 - 更多好玩的工具请关注微信公众号：菜芽创作小助手")
         self.root.geometry("1200x750")
         self.root.minsize(1100, 650)
         
@@ -2086,6 +2086,7 @@ class PhoneAgentGUI:
                 if all_devices:
                     def disconnect_all():
                         try:
+                            # 使用disconnect_result来检查断开连接结果
                             if device_type_en == "hdc":
                                 # HDC断开所有连接
                                 result = subprocess.run(['hdc', 'tdisconn', 'all'], 
@@ -2093,8 +2094,26 @@ class PhoneAgentGUI:
                                 command_desc = "HDC"
                             else:
                                 # ADB断开所有连接
-                                result = subprocess.run(['adb', 'disconnect'], 
-                                                     capture_output=True, text=True, timeout=15)
+                                # 先尝试断开所有连接
+                                disconnect_result = subprocess.run(['adb', 'disconnect'], 
+                                                               capture_output=True, text=True, timeout=15)
+                                
+                                # 再重启ADB服务以清理状态
+                                self._append_output("🔄 正在重启ADB服务以清理连接状态...\n")
+                                restart_result = subprocess.run(['adb', 'kill-server'], 
+                                                            capture_output=True, text=True, timeout=10)
+                                if restart_result.returncode == 0:
+                                    start_result = subprocess.run(['adb', 'start-server'], 
+                                                                capture_output=True, text=True, timeout=10)
+                                    if start_result.returncode == 0:
+                                        self._append_output("✅ ADB服务已重启\n")
+                                    else:
+                                        self._append_output("⚠️ ADB服务启动可能失败\n")
+                                else:
+                                    self._append_output("⚠️ ADB服务停止可能失败\n")
+                                
+                                # 将disconnect_result赋值给result以便统一处理
+                                result = disconnect_result
                                 command_desc = "ADB"
                             
                             if result.returncode == 0:
@@ -2439,7 +2458,26 @@ class PhoneAgentGUI:
             
     def connect_wireless_pair_device(self):
         """无线调试配对连接（Android 11+）"""
+        # 检查是否已经有无线配对窗口打开
+        if hasattr(self, 'wireless_pair_window') and self.wireless_pair_window is not None and tk.Toplevel.winfo_exists(self.wireless_pair_window):
+            self._append_output("⚠️ 安卓11+无线配对窗口已经打开，请先关闭现有窗口\n")
+            # 将现有窗口置于前台
+            self.wireless_pair_window.lift()
+            self.wireless_pair_window.attributes('-topmost', True)
+            self.wireless_pair_window.after(1000, lambda: self.wireless_pair_window.attributes('-topmost', False))
+            return
+            
+        # 检查是否已经有安卓10无线配对窗口打开
+        if hasattr(self, 'legacy_wireless_window') and self.legacy_wireless_window is not None and tk.Toplevel.winfo_exists(self.legacy_wireless_window):
+            self._append_output("⚠️ 安卓10无线配对窗口已经打开，请先关闭现有窗口\n")
+            # 将现有窗口置于前台
+            self.legacy_wireless_window.lift()
+            self.legacy_wireless_window.attributes('-topmost', True)
+            self.legacy_wireless_window.after(1000, lambda: self.legacy_wireless_window.attributes('-topmost', False))
+            return
+        
         dialog = tk.Toplevel(self.root)
+        self.wireless_pair_window = dialog
         dialog.title("无线调试配对连接 (Android 11+)")
         dialog.geometry("500x600")
         dialog.resizable(True, True)
@@ -2519,6 +2557,18 @@ class PhoneAgentGUI:
                 device_type_en = "hdc" if device_type == "鸿蒙" else "adb"
                 device_cmd = device_type_en
                 
+                # 对于ADB，先检查服务状态
+                if device_type_en == "adb":
+                    self._append_output("🔍 检查ADB服务状态...\n")
+                    adb_check = subprocess.run(['adb', 'devices'], 
+                                             capture_output=True, text=True, timeout=10)
+                    
+                    if adb_check.returncode != 0:
+                        self._append_output("⚠️ ADB服务异常，正在重启...\n")
+                        subprocess.run(['adb', 'kill-server'], capture_output=True, text=True, timeout=10)
+                        subprocess.run(['adb', 'start-server'], capture_output=True, text=True, timeout=10)
+                        self._append_output("✅ ADB服务已重启\n")
+                
                 # 第一步：配对
                 pair_result = subprocess.run([device_cmd, 'pair', pair_address],
                                            input=pair_code + '\n',
@@ -2560,7 +2610,11 @@ class PhoneAgentGUI:
                     else:
                         error_msg = connect_result.stderr.strip() if connect_result.stderr else f"连接失败，返回码: {connect_result.returncode}"
                         self._append_output(f"❌ 连接失败: {error_msg}\n")
-                        messagebox.showerror("连接失败", error_msg)
+                        
+                        # 提供更详细的诊断信息
+                        diagnosis_msg = f"{error_msg}\\n\\n常见问题：\\n• 如果之前点击过'断开所有连接'，请稍等片刻再重试\\n• 尝试重启ADB服务：adb kill-server && adb start-server\\n• 检查设备是否已撤销之前的配对\\n• 确认设备网络连接正常"
+                        
+                        messagebox.showerror("连接失败", diagnosis_msg)
                 else:
                     error_msg = pair_result.stderr.strip() if pair_result.stderr else f"配对失败，返回码: {pair_result.returncode}"
                     self._append_output(f"❌ 配对失败: {error_msg}\n")
@@ -2586,6 +2640,9 @@ class PhoneAgentGUI:
         
         # 设置焦点到配对码输入框
         pair_code_entry.focus()
+        
+        # 绑定窗口关闭事件
+        dialog.protocol("WM_DELETE_WINDOW", self._on_wireless_pair_window_close)
         
     def install_adb_keyboard(self):
         """安装ADB键盘应用（仅支持安卓设备）"""
@@ -2888,9 +2945,42 @@ class PhoneAgentGUI:
             self.device_details_window = None
         self._append_output("✅ 设备详情窗口已关闭\n")
     
+    def _on_wireless_pair_window_close(self):
+        """安卓11+无线配对窗口关闭事件处理"""
+        if hasattr(self, 'wireless_pair_window') and self.wireless_pair_window:
+            self.wireless_pair_window.destroy()
+            self.wireless_pair_window = None
+        self._append_output("✅ 安卓11+无线配对窗口已关闭\n")
+    
+    def _on_legacy_wireless_window_close(self):
+        """安卓10无线配对窗口关闭事件处理"""
+        if hasattr(self, 'legacy_wireless_window') and self.legacy_wireless_window:
+            self.legacy_wireless_window.destroy()
+            self.legacy_wireless_window = None
+        self._append_output("✅ 安卓10无线配对窗口已关闭\n")
+    
     def connect_wireless_pair_device(self):
         """无线调试配对连接（Android 11+）"""
+        # 检查是否已经有无线配对窗口打开
+        if hasattr(self, 'wireless_pair_window') and self.wireless_pair_window is not None and tk.Toplevel.winfo_exists(self.wireless_pair_window):
+            self._append_output("⚠️ 安卓11+无线配对窗口已经打开，请先关闭现有窗口\n")
+            # 将现有窗口置于前台
+            self.wireless_pair_window.lift()
+            self.wireless_pair_window.attributes('-topmost', True)
+            self.wireless_pair_window.after(1000, lambda: self.wireless_pair_window.attributes('-topmost', False))
+            return
+            
+        # 检查是否已经有安卓10无线配对窗口打开
+        if hasattr(self, 'legacy_wireless_window') and self.legacy_wireless_window is not None and tk.Toplevel.winfo_exists(self.legacy_wireless_window):
+            self._append_output("⚠️ 安卓10无线配对窗口已经打开，请先关闭现有窗口\n")
+            # 将现有窗口置于前台
+            self.legacy_wireless_window.lift()
+            self.legacy_wireless_window.attributes('-topmost', True)
+            self.legacy_wireless_window.after(1000, lambda: self.legacy_wireless_window.attributes('-topmost', False))
+            return
+        
         dialog = tk.Toplevel(self.root)
+        self.wireless_pair_window = dialog
         dialog.title("无线调试配对连接 (Android 11+)")
         dialog.geometry("500x600")
         dialog.resizable(True, True)
@@ -2970,6 +3060,18 @@ class PhoneAgentGUI:
                 device_type_en = "hdc" if device_type == "鸿蒙" else "adb"
                 device_cmd = device_type_en
                 
+                # 对于ADB，先检查服务状态
+                if device_type_en == "adb":
+                    self._append_output("🔍 检查ADB服务状态...\n")
+                    adb_check = subprocess.run(['adb', 'devices'], 
+                                             capture_output=True, text=True, timeout=10)
+                    
+                    if adb_check.returncode != 0:
+                        self._append_output("⚠️ ADB服务异常，正在重启...\n")
+                        subprocess.run(['adb', 'kill-server'], capture_output=True, text=True, timeout=10)
+                        subprocess.run(['adb', 'start-server'], capture_output=True, text=True, timeout=10)
+                        self._append_output("✅ ADB服务已重启\n")
+                
                 # 第一步：配对
                 pair_result = subprocess.run([device_cmd, 'pair', pair_address],
                                            input=pair_code + '\n',
@@ -3011,7 +3113,11 @@ class PhoneAgentGUI:
                     else:
                         error_msg = connect_result.stderr.strip() if connect_result.stderr else f"连接失败，返回码: {connect_result.returncode}"
                         self._append_output(f"❌ 连接失败: {error_msg}\n")
-                        messagebox.showerror("连接失败", error_msg)
+                        
+                        # 提供更详细的诊断信息
+                        diagnosis_msg = f"{error_msg}\\n\\n常见问题：\\n• 如果之前点击过'断开所有连接'，请稍等片刻再重试\\n• 尝试重启ADB服务：adb kill-server && adb start-server\\n• 检查设备是否已撤销之前的配对\\n• 确认设备网络连接正常"
+                        
+                        messagebox.showerror("连接失败", diagnosis_msg)
                 else:
                     error_msg = pair_result.stderr.strip() if pair_result.stderr else f"配对失败，返回码: {pair_result.returncode}"
                     self._append_output(f"❌ 配对失败: {error_msg}\n")
@@ -3037,10 +3143,32 @@ class PhoneAgentGUI:
         
         # 设置焦点到配对码输入框
         pair_code_entry.focus()
+        
+        # 绑定窗口关闭事件
+        dialog.protocol("WM_DELETE_WINDOW", self._on_wireless_pair_window_close)
 
     def connect_legacy_wireless_device(self):
         """无线调试配置连接（Android 10及以下）"""
+        # 检查是否已经有安卓10无线配对窗口打开
+        if hasattr(self, 'legacy_wireless_window') and self.legacy_wireless_window is not None and tk.Toplevel.winfo_exists(self.legacy_wireless_window):
+            self._append_output("⚠️ 安卓10无线配对窗口已经打开，请先关闭现有窗口\n")
+            # 将现有窗口置于前台
+            self.legacy_wireless_window.lift()
+            self.legacy_wireless_window.attributes('-topmost', True)
+            self.legacy_wireless_window.after(1000, lambda: self.legacy_wireless_window.attributes('-topmost', False))
+            return
+            
+        # 检查是否已经有安卓11+无线配对窗口打开
+        if hasattr(self, 'wireless_pair_window') and self.wireless_pair_window is not None and tk.Toplevel.winfo_exists(self.wireless_pair_window):
+            self._append_output("⚠️ 安卓11+无线配对窗口已经打开，请先关闭现有窗口\n")
+            # 将现有窗口置于前台
+            self.wireless_pair_window.lift()
+            self.wireless_pair_window.attributes('-topmost', True)
+            self.wireless_pair_window.after(1000, lambda: self.wireless_pair_window.attributes('-topmost', False))
+            return
+        
         dialog = tk.Toplevel(self.root)
+        self.legacy_wireless_window = dialog
         dialog.title("无线调试配置连接 (Android 10及以下)")
         dialog.geometry("500x550")
         dialog.resizable(True, True)
@@ -3109,6 +3237,17 @@ class PhoneAgentGUI:
             self._append_output(f"🔑 正在开始配对连接 {remote_address}...\\n")
             
             try:
+                # 先检查ADB服务状态，必要时重启
+                self._append_output("🔍 检查ADB服务状态...\\n")
+                adb_check = subprocess.run(['adb', 'devices'], 
+                                         capture_output=True, text=True, timeout=10)
+                
+                if adb_check.returncode != 0:
+                    self._append_output("⚠️ ADB服务异常，正在重启...\\n")
+                    subprocess.run(['adb', 'kill-server'], capture_output=True, text=True, timeout=10)
+                    subprocess.run(['adb', 'start-server'], capture_output=True, text=True, timeout=10)
+                    self._append_output("✅ ADB服务已重启\\n")
+                
                 # 尝试ping一下看是否能连通
                 import platform
                 if platform.system().lower() == 'windows':
@@ -3153,7 +3292,11 @@ class PhoneAgentGUI:
                 else:
                     error_msg = connect_result.stderr.strip() if connect_result.stderr else connect_result.stdout.strip() or f"连接失败，返回码: {connect_result.returncode}"
                     self._append_output(f"❌ 连接失败: {error_msg}\\n")
-                    messagebox.showerror("连接失败", f"无法连接到设备 {remote_address}\\n\\n请确保：\\n1. 设备已开启USB调试\\n2. 设备与PC在同一网络\\n3. 设备已启用网络ADB（可能需要先USB连接执行adb tcpip 5555）")
+                    
+                    # 提供更详细的诊断信息
+                    diagnosis_msg = f"无法连接到设备 {remote_address}\\n\\n请确保：\\n1. 设备已开启USB调试\\n2. 设备与PC在同一网络\\n3. 设备已启用网络ADB（可能需要先USB连接执行adb tcpip 5555）\\n\\n常见问题：\\n• 如果之前点击过'断开所有连接'，请稍等片刻再重试\\n• 尝试重启ADB服务：adb kill-server && adb start-server\\n• 检查设备防火墙设置"
+                    
+                    messagebox.showerror("连接失败", diagnosis_msg)
                     
             except subprocess.TimeoutExpired:
                 self._append_output("❌ 连接超时\\n")
@@ -3199,6 +3342,9 @@ class PhoneAgentGUI:
         
         # 设置焦点到IP地址输入框
         ip_entry.focus()
+        
+        # 绑定窗口关闭事件
+        dialog.protocol("WM_DELETE_WINDOW", self._on_legacy_wireless_window_close)
 
     def connect_hdc_remote_device(self):
         """远程连接HDC设备"""
@@ -3294,6 +3440,9 @@ class PhoneAgentGUI:
         
         # 设置焦点到IP地址输入框
         ip_entry.focus()
+        
+        # 绑定窗口关闭事件
+        dialog.protocol("WM_DELETE_WINDOW", self._on_legacy_wireless_window_close)
 
     def on_config_change(self):
         """配置变化时自动保存（带防抖）"""
@@ -3960,6 +4109,9 @@ class PhoneAgentGUI:
         
         # 设置焦点到IP地址输入框
         ip_entry.focus()
+        
+        # 绑定窗口关闭事件
+        dialog.protocol("WM_DELETE_WINDOW", self._on_legacy_wireless_window_close)
         ip_entry.select_range(0, tk.END)
 
     def on_device_type_change(self):
