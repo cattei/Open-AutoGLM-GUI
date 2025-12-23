@@ -709,7 +709,7 @@ class PhoneAgentGUI:
             self.remote_desktop_button = ttk.Button(self.adb_control_frame, text="🖥️远程桌面", command=self.open_remote_desktop)
             self.adb_keyboard_button = ttk.Button(self.adb_control_frame, text="📲 安装ADB键盘", command=self.install_adb_keyboard)
             
-            # 通用按钮
+            # 通用按钮 - 关注公众号按钮始终在最右边
             ttk.Button(self.adb_control_frame, text="📱 关注公众号", command=self.open_wechat_qrcode).pack(side=tk.LEFT, padx=(0, 8))
             
             # 初始设置按钮显示状态
@@ -4662,10 +4662,10 @@ class PhoneAgentGUI:
                         elif "远程桌面" in text and not is_visible:
                             widget.pack(side=tk.LEFT, padx=(0, 8))
                 
-                # 确保关注公众号按钮始终在最后
+                # 确保关注公众号按钮始终在最后（最右边）
                 for widget, text, is_visible in buttons_info:
                     if "关注公众号" in text:
-                        # 重新打包到最后
+                        # 重新打包到最后，确保在其他按钮的最右边
                         widget.pack_forget()
                         widget.pack(side=tk.LEFT, padx=(0, 8))
                         break
@@ -4702,6 +4702,45 @@ class PhoneAgentGUI:
         # 自动保存配置
         self.on_config_change()
     
+    def update_device_buttons_visibility(self):
+        """更新设备按钮的可见性，确保关注公众号按钮始终在最右边"""
+        try:
+            if hasattr(self, 'adb_control_frame'):
+                # 获取所有按钮
+                buttons_info = []
+                for widget in self.adb_control_frame.winfo_children():
+                    if isinstance(widget, ttk.Button):
+                        text = widget.cget('text')
+                        is_visible = widget.winfo_viewable()
+                        buttons_info.append((widget, text, is_visible))
+                
+                # 获取当前设备类型
+                device_type = self.device_type.get()
+                if device_type == "安卓":
+                    device_type_en = "adb"
+                elif device_type == "鸿蒙":
+                    device_type_en = "hdc"
+                elif device_type == "iOS":
+                    device_type_en = "ios"
+                else:
+                    device_type_en = "adb"
+                
+                # 先隐藏所有按钮
+                for widget, text, is_visible in buttons_info:
+                    widget.pack_forget()
+                
+                # 根据设备类型重新显示按钮
+                for widget, text, is_visible in buttons_info:
+                    # 通用按钮（所有设备类型都显示）
+                    if "刷新设备" in text or "连接设备" in text or "设备详情" in text or "关注公众号" in text:
+                        widget.pack(side=tk.LEFT, padx=(0, 8))
+                    # 仅安卓设备的按钮
+                    elif device_type_en == "adb" and ("安装ADB键盘" in text or "远程桌面" in text):
+                        widget.pack(side=tk.LEFT, padx=(0, 8))
+                    # HDC和iOS模式不显示ADB相关按钮，其他按钮正常显示
+                        
+        except Exception as e:
+            print(f"更新按钮可见性时出错: {e}")
 
     
     def _auto_save_config(self):
