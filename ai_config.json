@@ -16,9 +16,11 @@
     "temperature": 0.1
   },
   "deepseek": {
-    "api_key": "",
-    "base_url": "https://api.deepseek.com",
+    "api_key": "sk-3ef31fa211f048a4829494014d75604a",
+    "base_url": "https://api.deepseek.com/v1",
     "model": "deepseek-chat",
+    "role": "system", 
+    "content": "你是个手机操作专家，会把我给的任务拆分成手机操作的步骤",
     "timeout": 30,
     "max_tokens": 200,
     "temperature": 0.1
