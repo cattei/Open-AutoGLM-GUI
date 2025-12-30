@@ -1429,11 +1429,61 @@ class PhoneAgentGUI:
         self.output_text.insert(tk.END, text)
         self.output_text.see(tk.END)
         
-    def _insert_direct_text(self, text):
-        """直接插入文本，完全保持原始格式"""
-        if text and hasattr(self, 'output_text'):  # 插入所有内容，包括空格和空行
-            self.output_text.insert(tk.END, text)
-            self.output_text.see(tk.END)
+        # 检测任务完成消息，显示提示框
+        if '✅ 程序执行成功完成。' in text:
+            self.root.after(0, self.show_task_complete_dialog)
+        
+    def show_task_complete_dialog(self):
+        """显示任务完成提示框，包含继续任务和取消任务按钮，以及10秒自动倒计时"""
+        # 创建居中的弹出对话框
+        dialog = self.create_centered_toplevel(self.root, "任务完成", 400, 180, resizable=False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # 倒计时变量
+        self.dialog_countdown = 10
+        
+        # 倒计时标签
+        countdown_text = tk.StringVar(value=f"任务完成！自动继续：{self.dialog_countdown}秒")
+        countdown_label = ttk.Label(dialog, textvariable=countdown_text, font=('Microsoft YaHei', 12, 'bold'))
+        countdown_label.pack(pady=20)
+        
+        # 按钮框架
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(pady=10)
+        
+        # 继续任务按钮
+        def continue_task():
+            dialog.destroy()
+            # 触发与点击运行按钮相同的操作
+            self.run_agent()
+        
+        continue_btn = ttk.Button(button_frame, text="继续任务", command=continue_task, style='Success.TButton')
+        continue_btn.pack(side=tk.LEFT, padx=10)
+        
+        # 取消任务按钮
+        def cancel_task():
+            dialog.destroy()
+        
+        cancel_btn = ttk.Button(button_frame, text="取消任务", command=cancel_task, style='Secondary.TButton')
+        cancel_btn.pack(side=tk.LEFT, padx=10)
+        
+        # 倒计时更新函数
+        def update_countdown():
+            if hasattr(self, 'dialog_countdown'):
+                self.dialog_countdown -= 1
+                if self.dialog_countdown > 0:
+                    countdown_text.set(f"任务完成！自动继续：{self.dialog_countdown}秒")
+                    dialog.after(1000, update_countdown)
+                else:
+                    # 倒计时结束，自动继续任务
+                    continue_task()
+        
+        # 开始倒计时
+        dialog.after(1000, update_countdown)
+        
+        # 设置对话框关闭时的处理
+        dialog.protocol("WM_DELETE_WINDOW", cancel_task)
         
 
         
