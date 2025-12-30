@@ -237,12 +237,7 @@ pip install -r requirements.txt
 3. 任务命令：`打开相机拍照并保存`
 4. 运行并检查输出
 
-## 🆘 获取帮助
 
-- **原始项目**: [Open-AutoGLM](https://github.com/zai-org/Open-AutoGLM)
-- **微信公众号**: 菜芽创作小助手（更多工具和教程）
-- **问题反馈**: 查看程序输出中的详细错误信息
-- **社区支持**: 加入相关技术交流群
 
 ## 📄 许可证
 

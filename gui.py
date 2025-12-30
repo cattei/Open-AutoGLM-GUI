@@ -125,7 +125,7 @@ from task_simplifier import TaskSimplifierManager
 class PhoneAgentGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("鸡哥手机助手 v1.8 - 更多好玩的工具请关注微信公众号：菜芽创作小助手")
+        self.root.title("私域新势力")
         self.root.geometry("1200x750")
         self.root.minsize(1100, 650)
         
@@ -547,72 +547,63 @@ class PhoneAgentGUI:
             title_frame = ttk.Frame(self.main_frame)
             title_frame.grid(row=0, column=0, columnspan=3, pady=(0, 25))
             
-            title_label = ttk.Label(title_frame, text="🤖 鸡哥手机助手", style='Title.TLabel')
-            title_label.pack()
-            
-            subtitle_label = ttk.Label(title_frame, text="AI驱动的手机自动化工具", font=('Microsoft YaHei', 10))
-            subtitle_label.pack()
-            
             # 配置区域
-            config_frame = ttk.LabelFrame(self.main_frame, text="⚙️ 配置参数", style='Card.TFrame', padding="8")
-            config_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 8))
-            config_frame.columnconfigure(1, weight=1)
+            self.config_frame = ttk.LabelFrame(self.main_frame, text="⚙️ 配置参数", style='Card.TFrame', padding="8")
+            self.config_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 8))
+            self.config_frame.columnconfigure(1, weight=1)
             
             # Base URL
-            ttk.Label(config_frame, text="🌐 Base URL:", font=('Microsoft YaHei', 9, 'bold')).grid(row=0, column=0, sticky=tk.W, pady=3)
-            url_entry = ttk.Entry(config_frame, textvariable=self.base_url, width=50, font=('Microsoft YaHei', 9))
-            url_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
+            self.url_label = ttk.Label(self.config_frame, text="🌐 Base URL:", font=('Microsoft YaHei', 9, 'bold'))
+            self.url_label.grid(row=0, column=0, sticky=tk.W, pady=3)
+            self.url_entry = ttk.Entry(self.config_frame, textvariable=self.base_url, width=50, font=('Microsoft YaHei', 9))
+            self.url_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
             
             # Model
-            ttk.Label(config_frame, text="🧠 Model:", font=('Microsoft YaHei', 9, 'bold')).grid(row=1, column=0, sticky=tk.W, pady=3)
-            model_entry = ttk.Entry(config_frame, textvariable=self.model, width=50, font=('Microsoft YaHei', 9))
-            model_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
+            self.model_label = ttk.Label(self.config_frame, text="🧠 Model:", font=('Microsoft YaHei', 9, 'bold'))
+            self.model_label.grid(row=1, column=0, sticky=tk.W, pady=3)
+            self.model_entry = ttk.Entry(self.config_frame, textvariable=self.model, width=50, font=('Microsoft YaHei', 9))
+            self.model_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
             
             # API Key
-            ttk.Label(config_frame, text="🔑 API Key:", font=('Microsoft YaHei', 9, 'bold')).grid(row=2, column=0, sticky=tk.W, pady=3)
-            apikey_frame = ttk.Frame(config_frame)
-            apikey_frame.grid(row=2, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
-            apikey_frame.columnconfigure(0, weight=1)
+            self.apikey_label = ttk.Label(self.config_frame, text="🔑 API Key:", font=('Microsoft YaHei', 9, 'bold'))
+            self.apikey_label.grid(row=2, column=0, sticky=tk.W, pady=3)
+            self.apikey_frame = ttk.Frame(self.config_frame)
+            self.apikey_frame.grid(row=2, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
+            self.apikey_frame.columnconfigure(0, weight=1)
             
-            self.apikey_entry = ttk.Entry(apikey_frame, textvariable=self.apikey, width=40, show="*", font=('Microsoft YaHei', 9))
+            self.apikey_entry = ttk.Entry(self.apikey_frame, textvariable=self.apikey, width=40, show="*", font=('Microsoft YaHei', 9))
             self.apikey_entry.grid(row=0, column=0, sticky=(tk.W, tk.E))
             
-            self.show_apikey_btn = ttk.Button(apikey_frame, text="👁️", width=2, command=self.toggle_apikey_visibility)
+            self.show_apikey_btn = ttk.Button(self.apikey_frame, text="👁️", width=2, command=self.toggle_apikey_visibility)
             self.show_apikey_btn.grid(row=0, column=1, padx=(3, 0))
             
             # Task
-            ttk.Label(config_frame, text="📝 Task:", font=('Microsoft YaHei', 9, 'bold')).grid(row=3, column=0, sticky=(tk.NW, tk.W), pady=3)
+            ttk.Label(self.config_frame, text="📝 Task:", font=('Microsoft YaHei', 9, 'bold')).grid(row=3, column=0, sticky=(tk.NW, tk.W), pady=3)
             
             # 任务输入框和按钮的组合框架
-            task_frame = ttk.Frame(config_frame)
+            task_frame = ttk.Frame(self.config_frame)
             task_frame.grid(row=3, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=3)
             task_frame.columnconfigure(0, weight=1)
             
-            self.task_text = tk.Text(task_frame, width=50, height=2, font=('Microsoft YaHei', 9), wrap=tk.WORD)
+            self.task_text = tk.Text(task_frame, width=50, height=12, font=('Microsoft YaHei', 9), wrap=tk.WORD)
             self.task_text.grid(row=0, column=0, sticky=(tk.W, tk.E))
             
             # 任务操作按钮框架
             task_buttons_frame = ttk.Frame(task_frame)
-            task_buttons_frame.grid(row=0, column=1, padx=(5, 0))
+            task_buttons_frame.grid(row=0, column=1, padx=(5, 0), sticky=tk.N)
             
-            # 任务精简按钮
-            self.simplify_task_button = ttk.Button(task_buttons_frame, text="🤖 AI润色", 
-                                                 command=self.show_task_simplifier, 
-                                                 style='Success.TButton')
-            self.simplify_task_button.grid(row=0, column=1, padx=(5, 0))
-            
-            # 任务历史按钮（放在AI润色按钮左边）
-            self.task_history_button = ttk.Button(task_buttons_frame, text="📚", 
-                                                 command=self.show_task_history, 
-                                                 width=2)
-            self.task_history_button.grid(row=0, column=0)
+            # Markdown格式化按钮
+            ttk.Button(task_buttons_frame, text="B", width=2, command=lambda: self.apply_markdown_format("**")).grid(row=0, column=0, padx=(0, 5), pady=(0, 5))
+            ttk.Button(task_buttons_frame, text="I", width=2, command=lambda: self.apply_markdown_format("*"), style='TButton').grid(row=1, column=0, padx=(0, 5), pady=(0, 5))
+            ttk.Button(task_buttons_frame, text="U", width=2, command=lambda: self.apply_markdown_format("__")).grid(row=2, column=0, padx=(0, 5), pady=(0, 5))
+            ttk.Button(task_buttons_frame, text="-", width=2, command=lambda: self.apply_markdown_format("- ")).grid(row=3, column=0, padx=(0, 5), pady=(0, 5))
             
             # 设置初始任务文本
             self.task_text.insert("1.0", self.task.get())
             self.task_text.bind("<KeyRelease>", lambda e: self.on_task_change())
             
             # Max Steps 和 Device Type 在同一排
-            settings_row_frame = ttk.Frame(config_frame)
+            settings_row_frame = ttk.Frame(self.config_frame)
             settings_row_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=3)
             settings_row_frame.columnconfigure(1, weight=1)
             settings_row_frame.columnconfigure(3, weight=1)
@@ -676,19 +667,20 @@ class PhoneAgentGUI:
             ttk.Label(max_steps_entry_frame, text="（每个任务最大执行步数）", font=('Microsoft YaHei', 8), foreground='gray').grid(row=0, column=1, padx=(3, 0))
             
             # Base URL变化时自动保存
-            url_entry.bind("<KeyRelease>", lambda e: self.on_config_change())
+            self.url_entry.bind("<KeyRelease>", lambda e: self.on_config_change())
             
             # Model变化时自动保存  
-            model_entry.bind("<KeyRelease>", lambda e: self.on_config_change())
+            self.model_entry.bind("<KeyRelease>", lambda e: self.on_config_change())
             
             # API Key变化时自动保存
             self.apikey_entry.bind("<KeyRelease>", lambda e: self.on_config_change())
             
-            # Max Steps变化时自动保存
-            self.max_steps_entry.bind("<KeyRelease>", lambda e: self.on_config_change())
-            
             # Temperature变化时自动保存
             self.temperature_entry.bind("<KeyRelease>", lambda e: self.on_config_change())
+            
+            # 初始隐藏高级配置
+            self.config_collapsed = True
+            self.toggle_config()
             
             # ADB设备区域
             self.adb_frame = ttk.LabelFrame(self.main_frame, text="📱 ADB设备管理", style='Card.TFrame', padding="8")
@@ -709,9 +701,7 @@ class PhoneAgentGUI:
             self.remote_desktop_button = ttk.Button(self.adb_control_frame, text="🖥️远程桌面", command=self.open_remote_desktop)
             self.adb_keyboard_button = ttk.Button(self.adb_control_frame, text="📲 安装ADB键盘", command=self.install_adb_keyboard)
             
-            # 通用按钮 - 关注公众号按钮始终在最右边
-            ttk.Button(self.adb_control_frame, text="📱 关注公众号", command=self.open_wechat_qrcode).pack(side=tk.LEFT, padx=(0, 8))
-            
+        
             # 初始设置按钮显示状态
             self.update_device_buttons_visibility()
             
@@ -793,6 +783,20 @@ class PhoneAgentGUI:
             ttk.Button(aux_buttons, text="💾 保存配置", command=self.save_config).grid(row=0, column=1, padx=5)
             ttk.Button(aux_buttons, text="📁 加载配置", command=self.load_config_dialog).grid(row=0, column=2, padx=5)
             
+            # 新增按钮：收缩配置、AI润色、历史记录
+            self.toggle_config_btn = ttk.Button(aux_buttons, text="▼ 配置", command=self.toggle_config, width=6)
+            self.toggle_config_btn.grid(row=0, column=3, padx=5)
+            
+            self.simplify_task_button = ttk.Button(aux_buttons, text="🤖 AI润色", 
+                                                 command=self.show_task_simplifier, 
+                                                 style='Success.TButton')
+            self.simplify_task_button.grid(row=0, column=4, padx=5)
+            
+            self.task_history_button = ttk.Button(aux_buttons, text="📚 历史", 
+                                                 command=self.show_task_history, 
+                                                 width=5)
+            self.task_history_button.grid(row=0, column=5, padx=5)
+            
             # 输出区域
             output_frame = ttk.LabelFrame(self.main_frame, text="📋 输出控制台", style='Output.TFrame', padding="5")
             output_frame.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(5, 0))
@@ -815,11 +819,7 @@ class PhoneAgentGUI:
             status_label = ttk.Label(status_frame, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
             status_label.grid(row=0, column=0, sticky=(tk.W, tk.E))
             
-            # 微信公众号推广文字
-            wechat_label = ttk.Label(status_frame, text="更多好玩的工具请关注微信公众号：菜芽创作小助手", 
-                                   font=('Microsoft YaHei', 8), foreground='#666666')
-            wechat_label.grid(row=0, column=1, sticky=tk.N)
-            
+                        
             # 时间显示
             self.time_var = tk.StringVar(value="")
             time_label = ttk.Label(status_frame, textvariable=self.time_var, relief=tk.SUNKEN, anchor=tk.E, width=25)
@@ -829,7 +829,7 @@ class PhoneAgentGUI:
             self.update_time()
             
             # 设备扫描将在配置加载完成后进行，避免重复扫描
-            # self.root.after(500, self.async_refresh_devices)  # 注释掉避免重复
+            self.root.after(500, self.async_refresh_devices)  # 页面打开后自动刷新设备
             
         except Exception as e:
             print(f"创建完整界面时出错: {e}")
@@ -841,13 +841,51 @@ class PhoneAgentGUI:
                 # startup_label 可能已经被销毁
                 pass
     
-    def update_time(self):
-        """更新时间显示"""
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        if hasattr(self, 'time_var'):
-            self.time_var.set(current_time)
-        self.root.after(1000, self.update_time)
+    def apply_markdown_format(self, format_str):
+        """应用markdown格式到选中文本或光标位置"""
+        try:
+            # 获取选中文本
+            selection = self.task_text.tag_ranges(tk.SEL)
+            if selection:
+                # 有选中文本，包裹格式
+                start, end = selection
+                selected_text = self.task_text.get(start, end)
+                self.task_text.delete(start, end)
+                self.task_text.insert(start, f"{format_str}{selected_text}{format_str}")
+            else:
+                # 无选中文本，插入格式
+                cursor_pos = self.task_text.index(tk.INSERT)
+                self.task_text.insert(cursor_pos, format_str)
+        except Exception as e:
+            print(f"应用markdown格式失败: {str(e)}")
+    
+    def toggle_config(self):
+        """切换配置参数的显示/隐藏状态"""
+        self.config_collapsed = not self.config_collapsed
         
+        if self.config_collapsed:
+            # 隐藏高级配置
+            self.url_label.grid_remove()
+            self.url_entry.grid_remove()
+            self.model_label.grid_remove()
+            self.model_entry.grid_remove()
+            self.apikey_label.grid_remove()
+            self.apikey_frame.grid_remove()
+            # 检查按钮是否存在，避免初始化时出错
+            if hasattr(self, 'toggle_config_btn'):
+                self.toggle_config_btn.config(text="▼ 配置")
+        else:
+            # 显示高级配置
+            self.url_label.grid()
+            self.url_entry.grid()
+            self.model_label.grid()
+            self.model_entry.grid()
+            self.apikey_label.grid()
+            self.apikey_frame.grid()
+            # 检查按钮是否存在，避免初始化时出错
+            if hasattr(self, 'toggle_config_btn'):
+                self.toggle_config_btn.config(text="▲ 配置")
+    
     def update_time(self):
         """更新时间显示"""
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -3115,15 +3153,7 @@ class PhoneAgentGUI:
             self.qrcode_main_frame = ttk.Frame(self.qrcode_window, padding="10")
             self.qrcode_main_frame.pack(fill=tk.BOTH, expand=True)
             
-            # 标题
-            title_label = ttk.Label(self.qrcode_main_frame, text="📱 微信关注公众号", 
-                                   font=('Microsoft YaHei', 14, 'bold'))
-            title_label.pack(pady=(0, 5))
-            
-            # 公众号名称
-            name_label = ttk.Label(self.qrcode_main_frame, text="菜芽创作小助手", 
-                                  font=('Microsoft YaHei', 12))
-            name_label.pack(pady=(0, 10))
+          
             
             # 加载二维码图片
             try:
