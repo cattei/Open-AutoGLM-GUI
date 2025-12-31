@@ -678,8 +678,8 @@ class PhoneAgentGUI:
             # Temperature变化时自动保存
             self.temperature_entry.bind("<KeyRelease>", lambda e: self.on_config_change())
             
-            # 初始隐藏高级配置
-            self.config_collapsed = True
+            # 初始显示高级配置
+            self.config_collapsed = False
             self.toggle_config()
             
             # ADB设备区域
@@ -794,7 +794,7 @@ class PhoneAgentGUI:
             
             self.task_history_button = ttk.Button(aux_buttons, text="📚 历史", 
                                                  command=self.show_task_history, 
-                                                 width=5)
+                                                 width=8)
             self.task_history_button.grid(row=0, column=5, padx=5)
             
             # 输出区域
@@ -1140,9 +1140,8 @@ class PhoneAgentGUI:
         
         # 使用线程安全的输出函数 - 移到try块外部
         def safe_output(text):
-            if text:
-                # 直接插入到GUI，不做任何格式化处理
-                self.root.after(0, self._insert_direct_text, text)
+            if text:                # 直接插入到GUI，不做任何格式化处理
+                self.root.after(0, self._append_output, text)
         
         try:
             
@@ -1440,11 +1439,12 @@ class PhoneAgentGUI:
         dialog.transient(self.root)
         dialog.grab_set()
         
-        # 倒计时变量
-        self.dialog_countdown = 10
+        # 倒计时变量 - 使用局部变量代替实例属性
+        countdown = 10
+        countdown_stopped = False
         
         # 倒计时标签
-        countdown_text = tk.StringVar(value=f"任务完成！自动继续：{self.dialog_countdown}秒")
+        countdown_text = tk.StringVar(value=f"任务完成！自动继续：{countdown}秒")
         countdown_label = ttk.Label(dialog, textvariable=countdown_text, font=('Microsoft YaHei', 12, 'bold'))
         countdown_label.pack(pady=20)
         
@@ -1454,6 +1454,8 @@ class PhoneAgentGUI:
         
         # 继续任务按钮
         def continue_task():
+            nonlocal countdown_stopped
+            countdown_stopped = True
             dialog.destroy()
             # 触发与点击运行按钮相同的操作
             self.run_agent()
@@ -1463,6 +1465,8 @@ class PhoneAgentGUI:
         
         # 取消任务按钮
         def cancel_task():
+            nonlocal countdown_stopped
+            countdown_stopped = True
             dialog.destroy()
         
         cancel_btn = ttk.Button(button_frame, text="取消任务", command=cancel_task, style='Secondary.TButton')
@@ -1470,11 +1474,14 @@ class PhoneAgentGUI:
         
         # 倒计时更新函数
         def update_countdown():
-            if hasattr(self, 'dialog_countdown'):
-                self.dialog_countdown -= 1
-                if self.dialog_countdown > 0:
-                    countdown_text.set(f"任务完成！自动继续：{self.dialog_countdown}秒")
-                    dialog.after(1000, update_countdown)
+            nonlocal countdown, countdown_stopped
+            if not countdown_stopped:
+                countdown -= 1
+                if countdown > 0:
+                    countdown_text.set(f"任务完成！自动继续：{countdown}秒")
+                    # 确保对话框还存在再更新倒计时
+                    if dialog.winfo_exists():
+                        dialog.after(1000, update_countdown)
                 else:
                     # 倒计时结束，自动继续任务
                     continue_task()
