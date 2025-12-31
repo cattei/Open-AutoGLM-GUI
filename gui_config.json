@@ -2,11 +2,11 @@
   "base_url": "https://open.bigmodel.cn/api/paas/v4",
   "model": "autoglm-phone",
   "apikey": "ad6344498524401182c98c2658196208.JhJVvBBpQ5dUCKcs",
-  "task": "1. 打开小红书应用。\n2. 进入“发现”页面并下拉刷新。\n3. 浏览并选择一个帖子。\n4. 进入该帖子的评论区。\n5. 阅读帖子及评论内容。\n6. 撰写并发布一条包含文字和表情的评论。\n7. 返回“发现”页面。\n8. 重复步骤3至7，共完成2次不同的评论。",
+  "task": "1. 杀掉小红书的进程，返回桌面后打开小红书应用。 2. 进入“发现”页面并下拉刷新。 3. 浏览并选择一个帖子。 4. 进入该帖子的评论区。 5. 阅读帖子及评论内容。 6. 撰写并发布一条包含文字和表情的评论。 7. 返回“发现”页面。 8. 重复步骤3至7，共完成2次不同的评论。",
   "max_steps": 20000,
   "temperature": 0.2,
   "device_type": "adb",
-  "selected_device": "aaucrkg67pswu8qw (2312DRAABC)",
+  "selected_device": "",
   "remote_connection": {
     "ip": "192.168.1.100",
     "port": "5555"
@@ -19,6 +19,5 @@
     "ip": "192.168.1.100",
     "port": "5555"
   },
-  "ios_device_ip": "localhost",
-  "last_selected_ai_platform": "deepseek"
+  "ios_device_ip": "localhost"
 }
